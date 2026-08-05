@@ -19,7 +19,7 @@ function parseSpintax(text) {
   return text;
 }
 
-// Menu Utama
+// Menu Utama Inline
 const getMainMenu = () => {
   return Markup.inlineKeyboard([
     [
@@ -33,12 +33,12 @@ const getMainMenu = () => {
   ]);
 };
 
-// Helper untuk hapus pesan lama agar chat tetap bersih
+// Helper Hapus Pesan Lama
 async function safeDeleteMessage(ctx) {
   try {
     await ctx.deleteMessage();
   } catch (e) {
-    // Abaikan jika pesan sudah terhapus
+    // Abaikan error jika pesan sudah terhapus
   }
 }
 
@@ -133,7 +133,7 @@ bot.action('start_email', async (ctx) => {
   );
 });
 
-// Handler Input Teks dari User
+// Handler Input Teks
 bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
   const state = userState[userId];
@@ -142,7 +142,7 @@ bot.on('text', async (ctx) => {
     return ctx.reply('Ketik /start untuk membuka menu utama.', getMainMenu());
   }
 
-  // Menerima Input URL GAS
+  // Input URL GAS
   if (state.step === 'AWAITING_GAS_URL' || state.step === 'AWAITING_GAS_URL_FIRST') {
     const url = ctx.message.text.trim();
     if (!url.startsWith('https://script.google.com/')) {
@@ -158,7 +158,7 @@ bot.on('text', async (ctx) => {
     );
   }
 
-  // Menerima Email Target
+  // Input Email
   if (state.step === 'AWAITING_EMAILS') {
     const rawEmails = ctx.message.text;
     const emailList = rawEmails.split(/[\n,]+/).map(e => e.trim()).filter(e => e.includes('@'));
@@ -177,7 +177,7 @@ bot.on('text', async (ctx) => {
     );
   }
 
-  // Menerima Subjek Email
+  // Input Subjek
   if (state.step === 'AWAITING_SUBJECT') {
     userState[userId].subject = ctx.message.text.trim();
     userState[userId].step = 'AWAITING_BODY';
@@ -188,7 +188,7 @@ bot.on('text', async (ctx) => {
     );
   }
 
-  // Menerima Isi Pesan
+  // Input Pesan & Ringkasan
   if (state.step === 'AWAITING_BODY') {
     userState[userId].body = ctx.message.text.trim();
     userState[userId].step = 'AWAITING_CONFIRMATION';
@@ -224,7 +224,7 @@ bot.action('cancel_send', async (ctx) => {
   return ctx.reply('❌ Transmisi dibatalkan.', getMainMenu());
 });
 
-// Konfirmasi Kirim
+// Konfirmasi Kirim (Diperbaiki untuk Menangani Redirect GAS)
 bot.action('confirm_send', async (ctx) => {
   await ctx.answerCbQuery();
   await safeDeleteMessage(ctx);
@@ -246,10 +246,14 @@ bot.action('confirm_send', async (ctx) => {
   };
 
   try {
+    // Menambahkan opsi redirect 'follow' dan mode 'cors' untuk GAS Web App
     const response = await fetch(data.gasUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
+      headers: { 
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify(payload),
+      redirect: 'follow'
     });
 
     const responseText = await response.text();
@@ -258,10 +262,9 @@ bot.action('confirm_send', async (ctx) => {
     try {
       result = JSON.parse(responseText);
     } catch (e) {
-      throw new Error("URL GAS yang dimasukkan bukan Web App JSON. Pastikan Akses diset 'Anyone'.");
+      throw new Error("Respon GAS bukan JSON. Pastikan Web App di-Deploy ulang sebagai Versi Baru ('New deployment').");
     }
 
-    // Hapus pesan loading
     try { await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id); } catch(e){}
 
     if (result.success) {
@@ -279,7 +282,7 @@ bot.action('confirm_send', async (ctx) => {
     }
   } catch (err) {
     try { await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id); } catch(e){}
-    ctx.reply(`❌ *Error Koneksi:* ${err.message}\n\n*Cara Perbaikan:* Buka Google Apps Script > Klik Deploy > New Deployment > Ubah 'Who has access' menjadi 'Anyone' > Deploy ulang.`, { parse_mode: 'Markdown' });
+    ctx.reply(`❌ *Error Koneksi:* ${err.message}`, { parse_mode: 'Markdown' });
   }
 
   userState[userId].step = null;
