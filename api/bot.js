@@ -108,7 +108,6 @@ bot.action('cancel', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Terima Lampiran PDF tanpa konversi Base64 (Super Ringan)
 bot.on('document', async (ctx) => {
   const session = getSession(ctx.from.id);
   if (session.step !== 'AWAIT_PDF') return;
@@ -128,7 +127,6 @@ bot.on('document', async (ctx) => {
   try {
     const fileLink = await ctx.telegram.getFileLink(doc.file_id);
     
-    // Simpan Direct Link Telegram PDF
     session.pdf = {
       url: fileLink.href,
       name: doc.file_name
@@ -251,11 +249,12 @@ bot.action('execute_blast', async (ctx) => {
       pdfName: session.pdf ? session.pdf.name : null
     };
 
-    // Tembak GAS secara asinkron tanpa membebankan Vercel
-    axios.post(session.gasUrl, payload, { timeout: 10000 }).catch(() => {});
+    // Kirim pemicu ke GAS dan tunggu konfirmasi awal
+    await axios.post(session.gasUrl, payload, { timeout: 30000 });
 
   } catch (err) {
-    console.error("Trigger error:", err);
+    const sentErr = await ctx.reply(`🚨 Gagal terhubung ke GAS: ${err.message}`, mainMenu);
+    session.lastMsgId = sentErr.message_id;
   } finally {
     session.isProcessing = false;
     session.step = 'IDLE';
