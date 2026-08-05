@@ -26,7 +26,6 @@ const mainMenu = Markup.inlineKeyboard([
   [Markup.button.callback('📊 CEK SESI', 'view_session'), Markup.button.callback('🧹 RESET DATA', 'reset_session')]
 ]);
 
-// Command /start
 bot.start(async (ctx) => {
   const session = getSession(ctx.from.id);
   await clearPrevMsg(ctx, session);
@@ -40,7 +39,6 @@ bot.start(async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Setting GAS Endpoint
 bot.action('set_gas', async (ctx) => {
   const session = getSession(ctx.from.id);
   session.step = 'AWAIT_GAS_URL';
@@ -53,7 +51,6 @@ bot.action('set_gas', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Start Blast Email Process
 bot.action('start_blast', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
@@ -74,7 +71,6 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Cek Sesi
 bot.action('view_session', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
@@ -92,7 +88,6 @@ bot.action('view_session', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Reset Data Sesi
 bot.action('reset_session', async (ctx) => {
   const session = getSession(ctx.from.id);
   userSessions[ctx.from.id] = { step: 'IDLE', isProcessing: false };
@@ -236,22 +231,22 @@ async function showConfirmation(ctx, session) {
   session.lastMsgId = sent.message_id;
 }
 
-// Handler Eksekusi Blast & Pelaporan Detail
+// Handler Eksekusi Asynchronous
 bot.action('execute_blast', async (ctx) => {
   const session = getSession(ctx.from.id);
 
   if (session.isProcessing) {
-    return ctx.answerCbQuery('⚠️ Email sedang diproses! Mohon tunggu...', { show_alert: true });
+    return ctx.answerCbQuery('⚠️ Pengiriman sedang berjalan! Mohon tunggu laporan selesai...', { show_alert: true });
   }
 
   session.isProcessing = true;
   ctx.answerCbQuery();
   await clearPrevMsg(ctx, session);
 
-  const statusMsg = await ctx.reply('🚀 PENGIRIMAN EMAIL SEDANG BERJALAN...\n\nSistem sedang mengirim email dengan Safe Delay (10s-20s). Mohon tidak menekan tombol lain.');
-
   try {
     const payload = {
+      chatId: ctx.from.id,
+      botToken: BOT_TOKEN,
       recipients: session.recipients,
       senderName: session.senderName,
       subject: session.subject,
@@ -260,35 +255,11 @@ bot.action('execute_blast', async (ctx) => {
       pdfName: session.pdf ? session.pdf.name : null
     };
 
-    // Timeout diset 10 menit agar menampung delay aman GAS
-    const response = await axios.post(session.gasUrl, payload, { timeout: 600000 });
-    const result = response.data;
-
-    try { await ctx.deleteMessage(statusMsg.message_id); } catch(e){}
-
-    if (result && result.status === 'success') {
-      let reportText = `🎉 LAPORAN PENGIRIMAN EMAIL SELESAI! 🎉\n\n` +
-        `✅ Berhasil Terkirim: ${result.sent} Email\n` +
-        `❌ Gagal Terkirim: ${result.failed} Email\n` +
-        `📊 Sisa Kuota Harian Gmail: ${result.remainingQuota} Email\n`;
-
-      if (result.failed > 0 && result.failedDetails && result.failedDetails.length > 0) {
-        reportText += `\nDetail Email Gagal:\n` + result.failedDetails.map(d => `• ${d}`).join('\n');
-      }
-
-      // Kirim Plain Text murni (Tanpa Markdown Parser) agar TIDAK UNDEFINED lagi!
-      const sentReport = await ctx.reply(reportText, mainMenu);
-      session.lastMsgId = sentReport.message_id;
-
-    } else {
-      const errMsg = (result && result.message) ? result.message : 'Respon server tidak dikenal';
-      const sentErr = await ctx.reply(`🚨 Gagal: ${errMsg}`, mainMenu);
-      session.lastMsgId = sentErr.message_id;
-    }
+    // Kirim request ke GAS (GAS akan langsung merespon dalam 1 detik)
+    await axios.post(session.gasUrl, payload, { timeout: 10000 });
 
   } catch (err) {
-    try { await ctx.deleteMessage(statusMsg.message_id); } catch(e){}
-    const sentErr = await ctx.reply(`🚨 Terjadi Kesalahan / Timeout: ${err.message}`, mainMenu);
+    const sentErr = await ctx.reply(`🚨 Gagal terhubung ke GAS: ${err.message}`, mainMenu);
     session.lastMsgId = sentErr.message_id;
   } finally {
     session.isProcessing = false;
