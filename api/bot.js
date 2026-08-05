@@ -26,6 +26,7 @@ const mainMenu = Markup.inlineKeyboard([
   [Markup.button.callback('📊 CEK SESI', 'view_session'), Markup.button.callback('🧹 RESET DATA', 'reset_session')]
 ]);
 
+// Command /start
 bot.start(async (ctx) => {
   const session = getSession(ctx.from.id);
   await clearPrevMsg(ctx, session);
@@ -39,6 +40,7 @@ bot.start(async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
+// Setting GAS Endpoint
 bot.action('set_gas', async (ctx) => {
   const session = getSession(ctx.from.id);
   session.step = 'AWAIT_GAS_URL';
@@ -51,6 +53,7 @@ bot.action('set_gas', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
+// Start Blast Email Process
 bot.action('start_blast', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
@@ -71,6 +74,7 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
+// Cek Sesi
 bot.action('view_session', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
@@ -88,6 +92,7 @@ bot.action('view_session', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
+// Reset Data Sesi
 bot.action('reset_session', async (ctx) => {
   const session = getSession(ctx.from.id);
   userSessions[ctx.from.id] = { step: 'IDLE', isProcessing: false };
@@ -231,7 +236,7 @@ async function showConfirmation(ctx, session) {
   session.lastMsgId = sent.message_id;
 }
 
-// Handler Eksekusi Asynchronous
+// Handler Eksekusi Insta-Ack Trigger (Bebas Timeout)
 bot.action('execute_blast', async (ctx) => {
   const session = getSession(ctx.from.id);
 
@@ -255,8 +260,13 @@ bot.action('execute_blast', async (ctx) => {
       pdfName: session.pdf ? session.pdf.name : null
     };
 
-    // Kirim request ke GAS (GAS akan langsung merespon dalam 1 detik)
-    await axios.post(session.gasUrl, payload, { timeout: 10000 });
+    // Panggil GAS (GAS akan merespon kilat < 1 detik)
+    const res = await axios.post(session.gasUrl, payload, { timeout: 15000 });
+
+    if (res.data && res.data.status !== 'success') {
+      const sentErr = await ctx.reply(`🚨 Gagal memulai antrean: ${res.data.message}`, mainMenu);
+      session.lastMsgId = sentErr.message_id;
+    }
 
   } catch (err) {
     const sentErr = await ctx.reply(`🚨 Gagal terhubung ke GAS: ${err.message}`, mainMenu);
