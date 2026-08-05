@@ -26,7 +26,6 @@ const mainMenu = Markup.inlineKeyboard([
   [Markup.button.callback('📊 CEK SESI', 'view_session'), Markup.button.callback('🧹 RESET DATA', 'reset_session')]
 ]);
 
-// Command /start
 bot.start(async (ctx) => {
   const session = getSession(ctx.from.id);
   await clearPrevMsg(ctx, session);
@@ -40,7 +39,6 @@ bot.start(async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Setting GAS Endpoint
 bot.action('set_gas', async (ctx) => {
   const session = getSession(ctx.from.id);
   session.step = 'AWAIT_GAS_URL';
@@ -53,7 +51,6 @@ bot.action('set_gas', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Start Blast Email Process
 bot.action('start_blast', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
@@ -74,7 +71,6 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Cek Sesi
 bot.action('view_session', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
@@ -92,7 +88,6 @@ bot.action('view_session', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Reset Data Sesi
 bot.action('reset_session', async (ctx) => {
   const session = getSession(ctx.from.id);
   userSessions[ctx.from.id] = { step: 'IDLE', isProcessing: false };
@@ -113,6 +108,7 @@ bot.action('cancel', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
+// Terima Lampiran PDF tanpa konversi Base64 (Super Ringan)
 bot.on('document', async (ctx) => {
   const session = getSession(ctx.from.id);
   if (session.step !== 'AWAIT_PDF') return;
@@ -129,23 +125,19 @@ bot.on('document', async (ctx) => {
     return;
   }
 
-  const processingMsg = await ctx.reply('⏳ Mengunduh & memproses lampiran PDF...');
-  
   try {
     const fileLink = await ctx.telegram.getFileLink(doc.file_id);
-    const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
     
+    // Simpan Direct Link Telegram PDF
     session.pdf = {
-      base64: Buffer.from(response.data).toString('base64'),
+      url: fileLink.href,
       name: doc.file_name
     };
 
-    try { await ctx.deleteMessage(processingMsg.message_id); } catch(e){}
     session.step = 'CONFIRMATION';
     await showConfirmation(ctx, session);
   } catch (err) {
-    try { await ctx.deleteMessage(processingMsg.message_id); } catch(e){}
-    const sentErr = await ctx.reply(`🚨 Gagal memproses file PDF: ${err.message}`, mainMenu);
+    const sentErr = await ctx.reply(`🚨 Gagal mengambil file PDF: ${err.message}`, mainMenu);
     session.lastMsgId = sentErr.message_id;
   }
 });
@@ -198,7 +190,7 @@ bot.on('text', async (ctx) => {
       await clearPrevMsg(ctx, session);
       session.body = text;
       session.step = 'AWAIT_PDF';
-      const sentPdf = await ctx.reply('📎 Upload File PDF Lampiran (Maksimal 5MB):\n\nAtau klik tombol Skip jika tanpa lampiran.', Markup.inlineKeyboard([
+      const sentPdf = await ctx.reply('📎 Upload File PDF Lampiran (Maksimal 10MB):\n\nAtau klik tombol Skip jika tanpa lampiran.', Markup.inlineKeyboard([
         [Markup.button.callback('⏭️ SKIP LAMPIRAN', 'skip_pdf')],
         [Markup.button.callback('❌ BATALKAN', 'cancel')]
       ]));
@@ -236,7 +228,6 @@ async function showConfirmation(ctx, session) {
   session.lastMsgId = sent.message_id;
 }
 
-// Handler Eksekusi Insta-Ack Trigger (Bebas Timeout)
 bot.action('execute_blast', async (ctx) => {
   const session = getSession(ctx.from.id);
 
@@ -256,21 +247,15 @@ bot.action('execute_blast', async (ctx) => {
       senderName: session.senderName,
       subject: session.subject,
       body: session.body,
-      pdfBase64: session.pdf ? session.pdf.base64 : null,
+      pdfUrl: session.pdf ? session.pdf.url : null,
       pdfName: session.pdf ? session.pdf.name : null
     };
 
-    // Panggil GAS (GAS akan merespon kilat < 1 detik)
-    const res = await axios.post(session.gasUrl, payload, { timeout: 15000 });
-
-    if (res.data && res.data.status !== 'success') {
-      const sentErr = await ctx.reply(`🚨 Gagal memulai antrean: ${res.data.message}`, mainMenu);
-      session.lastMsgId = sentErr.message_id;
-    }
+    // Tembak GAS secara asinkron tanpa membebankan Vercel
+    axios.post(session.gasUrl, payload, { timeout: 10000 }).catch(() => {});
 
   } catch (err) {
-    const sentErr = await ctx.reply(`🚨 Gagal terhubung ke GAS: ${err.message}`, mainMenu);
-    session.lastMsgId = sentErr.message_id;
+    console.error("Trigger error:", err);
   } finally {
     session.isProcessing = false;
     session.step = 'IDLE';
