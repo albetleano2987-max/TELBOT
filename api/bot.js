@@ -2,10 +2,10 @@ const { Telegraf, Markup } = require('telegraf');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// State sementara di memory serverless untuk menyimpan session per user
+// Memory state per user
 const userState = {};
 
-// Helper: Fungsi Parser Spintax {Pilihan 1|Pilihan 2}
+// Helper Spintax Parser
 function parseSpintax(text) {
   if (!text) return '';
   let matches;
@@ -19,7 +19,7 @@ function parseSpintax(text) {
   return text;
 }
 
-// Menu Utama (Inline Keyboards & Quick Reply Buttons)
+// Menu Utama
 const getMainMenu = () => {
   return Markup.inlineKeyboard([
     [
@@ -33,20 +33,21 @@ const getMainMenu = () => {
   ]);
 };
 
-// Quick Reply Keyboard bawah layar
-const getQuickReplyMenu = () => {
-  return Markup.keyboard([
-    ['🚀 Kirim Email', '⚙️ Setel GAS'],
-    ['📊 Status Bot', '❓ Panduan']
-  ]).resize();
-};
+// Helper untuk hapus pesan lama agar chat tetap bersih
+async function safeDeleteMessage(ctx) {
+  try {
+    await ctx.deleteMessage();
+  } catch (e) {
+    // Abaikan jika pesan sudah terhapus
+  }
+}
 
-// 1. Perintah /start & /menu
-bot.command(['start', 'menu'], (ctx) => {
+// 1. Command /start & /menu
+bot.command(['start', 'menu'], async (ctx) => {
   const name = ctx.from.first_name || 'User';
   return ctx.reply(
     `✨ *Halo ${name}! Selamat Datang di GandorMail Bot Gateway* 🚀\n\n` +
-    `Bot ini siap membantu kamu mengirimkan transmisi email massal ke antrean Google Apps Script (GAS) secara otomatis.\n\n` +
+    `Bot ini siap membantu kamu mengirimkan transmisi email massal ke antrean Google Apps Script (GAS).\n\n` +
     `Pilih menu di bawah ini untuk memulai:`,
     {
       parse_mode: 'Markdown',
@@ -55,52 +56,66 @@ bot.command(['start', 'menu'], (ctx) => {
   );
 });
 
-// Handling Tombol Quick Reply Bawah
-bot.hears('🚀 Kirim Email', (ctx) => ctx.reply('Silakan pilih opsi:', getMainMenu()));
-bot.hears('⚙️ Setel GAS', (ctx) => triggerSetGas(ctx));
-bot.hears('📊 Status Bot', (ctx) => triggerCheckStatus(ctx));
-bot.hears('❓ Panduan', (ctx) => triggerHelp(ctx));
+// 2. Action Handlers (Tombol Inline)
+bot.action('set_gas', async (ctx) => {
+  await ctx.answerCbQuery();
+  await safeDeleteMessage(ctx);
 
-// 2. Action Handlers untuk Inline Buttons
-bot.action('set_gas', (ctx) => triggerSetGas(ctx));
-bot.action('check_status', (ctx) => triggerCheckStatus(ctx));
-bot.action('help_info', (ctx) => triggerHelp(ctx));
-
-function triggerSetGas(ctx) {
   const userId = ctx.from.id;
   userState[userId] = { ...userState[userId], step: 'AWAITING_GAS_URL' };
+
   return ctx.reply(
     `🔗 *PENGATURAN ENDPOINT GAS*\n\n` +
     `Silakan kirimkan URL Web App Google Apps Script kamu.\n` +
     `_Contoh: https://script.google.com/macros/s/XXXXX/exec_`,
     { parse_mode: 'Markdown' }
   );
-}
+});
 
-function triggerCheckStatus(ctx) {
+bot.action('check_status', async (ctx) => {
+  await ctx.answerCbQuery();
   const userId = ctx.from.id;
   const gasUrl = userState[userId]?.gasUrl ? '✅ Terhubung' : '❌ Belum Disetel';
-  return ctx.reply(
-    `📊 *STATUS SISTEM GANDORMAIL*\n\n` +
-    `• *Status Bot:* 🟢 Online (Vercel Serverless)\n` +
-    `• *Endpoint GAS:* ${gasUrl}\n` +
-    `• *User Telegram ID:* \`${userId}\``,
-    { parse_mode: 'Markdown' }
-  );
-}
 
-function triggerHelp(ctx) {
-  return ctx.reply(
-    `💡 *PANDUAN SPINTAX & FORMAT GANDORMAIL*\n\n` +
-    `1. *Spintax Format:* Gunakan \`{Subjek 1|Subjek 2}\` untuk variasi kata otomatis.\n` +
-    `2. *Daftar Target:* Pisahkan email target menggunakan koma (\`,\`) atau baris baru.\n` +
-    `3. *Notifikasi:* Bot akan otomatis memberi tahu kamu di Telegram jika seluruh email di antrean telah selesai dikirim! 🎉`,
-    { parse_mode: 'Markdown' }
-  );
-}
+  try {
+    return await ctx.editMessageText(
+      `📊 *STATUS SISTEM GANDORMAIL*\n\n` +
+      `• *Status Bot:* 🟢 Online (Vercel Serverless)\n` +
+      `• *Endpoint GAS:* ${gasUrl}\n` +
+      `• *User Telegram ID:* \`${userId}\``,
+      {
+        parse_mode: 'Markdown',
+        ...getMainMenu()
+      }
+    );
+  } catch (e) {
+    return ctx.reply(`📊 *Status:* ${gasUrl}`, getMainMenu());
+  }
+});
+
+bot.action('help_info', async (ctx) => {
+  await ctx.answerCbQuery();
+  try {
+    return await ctx.editMessageText(
+      `💡 *PANDUAN SPINTAX & FORMAT GANDORMAIL*\n\n` +
+      `1. *Spintax Format:* Gunakan \`{Subjek 1|Subjek 2}\` untuk variasi kata otomatis.\n` +
+      `2. *Daftar Target:* Pisahkan email target menggunakan koma (\`,\`) atau baris baru.\n` +
+      `3. *Notifikasi:* Bot akan otomatis memberi tahu kamu di Telegram jika seluruh email selesai dikirim! 🎉`,
+      {
+        parse_mode: 'Markdown',
+        ...getMainMenu()
+      }
+    );
+  } catch (e) {
+    return ctx.reply('💡 Selesai membaca bantuan.', getMainMenu());
+  }
+});
 
 // 3. Alur Kirim Email Massal
-bot.action('start_email', (ctx) => {
+bot.action('start_email', async (ctx) => {
+  await ctx.answerCbQuery();
+  await safeDeleteMessage(ctx);
+
   const userId = ctx.from.id;
   if (!userState[userId]?.gasUrl) {
     userState[userId] = { step: 'AWAITING_GAS_URL_FIRST' };
@@ -113,19 +128,18 @@ bot.action('start_email', (ctx) => {
   userState[userId].step = 'AWAITING_EMAILS';
   return ctx.reply(
     `📝 *LANGKAH 1 DARI 3: ALAMAT EMAIL TARGET*\n\n` +
-    `Kirimkan daftar email target penerima. Kamu bisa memisahkannya dengan koma (,) atau baris baru (enter).\n\n` +
-    `_Maksimal 1000 email target per pengiriman._`,
+    `Kirimkan daftar email target penerima (pisahkan dengan koma atau baris baru):`,
     { parse_mode: 'Markdown' }
   );
 });
 
-// Handler Input Teks
+// Handler Input Teks dari User
 bot.on('text', async (ctx) => {
   const userId = ctx.from.id;
   const state = userState[userId];
 
   if (!state || !state.step) {
-    return ctx.reply('Ketik /start atau gunakan menu di bawah untuk mulai.', getQuickReplyMenu());
+    return ctx.reply('Ketik /start untuk membuka menu utama.', getMainMenu());
   }
 
   // Menerima Input URL GAS
@@ -150,7 +164,7 @@ bot.on('text', async (ctx) => {
     const emailList = rawEmails.split(/[\n,]+/).map(e => e.trim()).filter(e => e.includes('@'));
 
     if (emailList.length === 0) {
-      return ctx.reply('❌ Alamat email tidak valid. Silakan coba kirim ulang daftar email target:');
+      return ctx.reply('❌ Alamat email tidak valid. Silakan coba masukkan lagi:');
     }
 
     userState[userId].emails = emailList;
@@ -158,7 +172,7 @@ bot.on('text', async (ctx) => {
     return ctx.reply(
       `✅ *${emailList.length} Target Terdeteksi!*\n\n` +
       `📝 *LANGKAH 2 DARI 3: SUBJEK PESAN*\n` +
-      `Masukkan Subjek Email (Mendukung Spintax contoh: \`{Penting|Info Eksklusif} Penawaran Spesial\`):`,
+      `Masukkan Subjek Email (Contoh: \`{Penting|Info Eksklusif} Penawaran Spesial\`):`,
       { parse_mode: 'Markdown' }
     );
   }
@@ -200,30 +214,35 @@ bot.on('text', async (ctx) => {
 });
 
 // Batal
-bot.action('cancel_send', (ctx) => {
+bot.action('cancel_send', async (ctx) => {
+  await ctx.answerCbQuery();
+  await safeDeleteMessage(ctx);
+
   const userId = ctx.from.id;
   if (userState[userId]) userState[userId].step = null;
+
   return ctx.reply('❌ Transmisi dibatalkan.', getMainMenu());
 });
 
 // Konfirmasi Kirim
 bot.action('confirm_send', async (ctx) => {
+  await ctx.answerCbQuery();
+  await safeDeleteMessage(ctx);
+
   const userId = ctx.from.id;
   const data = userState[userId];
 
   if (!data || !data.emails) {
-    return ctx.reply('❌ Data transmisi tidak ditemukan. Silakan mulai dari /start.');
+    return ctx.reply('❌ Data transmisi tidak ditemukan. Ketik /start untuk mulai ulang.');
   }
 
-  ctx.reply('⏳ *Mengunggah transmisi ke Server Queue GAS...*', { parse_mode: 'Markdown' });
+  const loadingMsg = await ctx.reply('⏳ *Mengunggah transmisi ke Server Queue GAS...*', { parse_mode: 'Markdown' });
 
   const payload = {
     emails: data.emails,
     subject: data.subject,
     body: data.body,
-    notifyEmail: 'gandorchannel029@gmail.com',
-    telegramChatId: userId, // ID Telegram diselipkan agar GAS bisa mengirim callback notifikasi
-    attachment: null
+    telegramChatId: userId
   };
 
   try {
@@ -233,38 +252,45 @@ bot.action('confirm_send', async (ctx) => {
       body: JSON.stringify(payload)
     });
 
-    const result = await response.json();
+    const responseText = await response.text();
+    let result;
+    
+    try {
+      result = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error("URL GAS yang dimasukkan bukan Web App JSON. Pastikan Akses diset 'Anyone'.");
+    }
+
+    // Hapus pesan loading
+    try { await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id); } catch(e){}
 
     if (result.success) {
       ctx.reply(
         `✅ *BERHASIL MASUK ANTREAN SERVER!* 🎉\n\n` +
         `📦 *Detail:* ${result.message}\n` +
-        `🔔 Bot akan langsung memberikan notifikasi di Telegram ini saat seluruh email selesai terkirim!`,
+        `🔔 Bot akan langsung mengirim notifikasi di Telegram jika pengiriman selesai!`,
         {
           parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [Markup.button.callback('🔄 Kirim Lagi', 'start_email')],
-            [Markup.button.callback('🏠 Menu Utama', 'check_status')]
-          ])
+          ...getMainMenu()
         }
       );
     } else {
       ctx.reply(`❌ *Gagal dari Server GAS:* ${result.error}`, { parse_mode: 'Markdown' });
     }
   } catch (err) {
-    ctx.reply(`❌ *Error Koneksi:* Gagal terhubung ke URL GAS.\n\nDetail: ${err.message}`);
+    try { await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id); } catch(e){}
+    ctx.reply(`❌ *Error Koneksi:* ${err.message}\n\n*Cara Perbaikan:* Buka Google Apps Script > Klik Deploy > New Deployment > Ubah 'Who has access' menjadi 'Anyone' > Deploy ulang.`, { parse_mode: 'Markdown' });
   }
 
   userState[userId].step = null;
 });
 
-// 4. Webhook Endpoint untuk Notifikasi dari Google Apps Script (GAS Callback)
+// Webhook Handler Vercel & Callback GAS
 module.exports = async (req, res) => {
   try {
     if (req.method === 'POST') {
       const body = req.body;
 
-      // Jika request berasal dari Callback Laporan Selesai Google Apps Script
       if (body && body.action === 'GAS_REPORT_FINISHED') {
         const { chatId, totalSent, totalFailed } = body;
         if (chatId) {
@@ -281,7 +307,6 @@ module.exports = async (req, res) => {
         return res.status(200).json({ success: true });
       }
 
-      // Jika request normal dari Telegram Update
       await bot.handleUpdate(body);
       res.status(200).send('OK');
     } else {
