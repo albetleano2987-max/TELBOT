@@ -1,13 +1,17 @@
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
+const csv = require('csv-parser');
+const xlsx = require('xlsx');
+const stream = require('stream');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const bot = new Telegraf(BOT_TOKEN || '');
 const userSessions = {};
 
+// ====== HELPER FUNCTIONS ======
 const getSession = (userId) => {
   if (!userSessions[userId]) {
-    userSessions[userId] = { step: 'IDLE', isProcessing: false };
+    userSessions[userId] = { step: 'IDLE', isProcessing: false, recipients: [], senderName: '', subject: '', body: '', pdf: null, gasUrl: null };
   }
   return userSessions[userId];
 };
@@ -20,371 +24,226 @@ const clearPrevMsg = async (ctx, session) => {
   }
 };
 
-// Menu Utama yang Diupdate
+// Fungsi untuk membaca email dari file CSV/Excel
+const extractEmailsFromFile = async (ctx, docId) => {
+  try {
+    const fileLink = await ctx.telegram.getFileLink(docId);
+    const response = await axios({ method: 'get', url: fileLink.href, responseType: 'stream' });
+    const fileName = ctx.message.document.file_name.toLowerCase();
+    let emails = [];
+
+    if (fileName.endsWith('.csv')) {
+      // Baca CSV
+      await new Promise((resolve, reject) => {
+        response.data.pipe(csv())
+          .on('data', (row) => {
+            // Asumsi email ada di kolom pertama, atau kolom bernama 'email'
+            const value = Object.values(row)[0];
+            if (value && value.includes('@')) emails.push(value.trim());
+          })
+          .on('end', resolve)
+          .on('error', reject);
+      });
+    } else if (fileName.endsWith('.xlsx')) {
+      // Baca Excel
+      const chunks = [];
+      await new Promise((resolve, reject) => {
+        response.data.on('data', (chunk) => chunks.push(chunk));
+        response.data.on('end', resolve);
+        response.data.on('error', reject);
+      });
+      const buffer = Buffer.concat(chunks);
+      const workbook = xlsx.read(buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+      
+      data.forEach(row => {
+        if (row && row[0] && String(row[0]).includes('@')) {
+          emails.push(String(row[0]).trim());
+        }
+      });
+    }
+    return [...new Set(emails)]; // Hapus duplikat
+  } catch (err) {
+    console.error("Gagal baca file:", err);
+    return null;
+  }
+};
+
+// ====== MAIN MENUS ======
 const mainMenu = Markup.inlineKeyboard([
   [Markup.button.callback('🚀 BLAST EMAIL MASSAL', 'start_blast')],
-  [Markup.button.callback('📖 TUTORIAL LENGKAP', 'view_tutorial')],
   [Markup.button.callback('⚙️ SETTING WEBHOOK GAS', 'set_gas')],
   [Markup.button.callback('📊 CEK SESI', 'view_session'), Markup.button.callback('🧹 RESET DATA', 'reset_session')]
 ]);
 
+// ====== START & ACTIONS ======
 bot.start(async (ctx) => {
   const session = getSession(ctx.from.id);
   await clearPrevMsg(ctx, session);
-
   const sent = await ctx.reply(
-    `⚡ MAILBLAST GEN-Z SYSTEM (PRO) ⚡\n\n` +
-    `Botblast anti-spam pintar dengan Smart-Quota (Maks 500 email) & Safe Delay (10s-20s).\n\n` +
-    `Sistem otomatis menjadwalkan sisa email jika kuota harian Gmail habis.\n\n` +
-    `Silahkan pilih menu di bawah ini:`,
+    `⚡ MAILBLAST GEN-Z SYSTEM ⚡\n\n` +
+    `Botblast pintar anti-spam dengan Safe Delay (10s-20s) untuk garansi tembus INBOX UTAMA.\n\n` +
+    `Silahkan pilih menu:`,
     mainMenu
   );
   session.lastMsgId = sent.message_id;
 });
 
-// Fitur Tutorial (Mudah Dipahami)
-bot.action('view_tutorial', async (ctx) => {
-  const session = getSession(ctx.from.id);
-  ctx.answerCbQuery();
-  await clearPrevMsg(ctx, session);
-
-  const sent = await ctx.reply(
-    `📖 <b>TUTORIAL PENGGUNAAN BOTBLAST</b> 📖\n\n` +
-    `Bot ini dirancang untuk mengirim email massal dengan aman dan efisien. Ikuti panduan langkah demi langkah ini:\n\n` +
-    `<b>Langkah 1: Setup Awal (Wajib Sekali)</b>\n` +
-    `1. Buat Google Apps Script (GAS) Web App.\n` +
-    `2. Salin URL Web App GAS kamu (harus berakhiran <code>/exec</code>).\n` +
-    `3. Klik ⚙️ <b>SETTING WEBHOOK GAS</b> di bot ini dan tempelkan URL tersebut.\n` +
-    `4. Pastikan kamu sudah me-run fungsi perizinan manual di GAS sekali.\n\n` +
-    `<b>Langkah 2: Proses Blast Email</b>\n` +
-    `1. Klik 🚀 <b>BLAST EMAIL MASSAL</b>.\n` +
-    `2. Masukkan daftar email target (dipisahkan koma). Maksimal 500 email per antrean.\n` +
-    `3. Masukkan Nama Pengirim (Sender Name).\n` +
-    `4. Masukkan Subject Email (Bisa pakai Spintax).\n` +
-    `5. Masukkan Isi Pesan Email (Bisa pakai Spintax).\n` +
-    `6. Upload file PDF jika ada (Maks 10MB), atau skip.\n\n` +
-    `<b>Langkah 3: Konfirmasi & Pengiriman</b>\n` +
-    `1. Cek detail antrean pada menu konfirmasi.\n` +
-    `2. Pilih 🚀 <b>KIRIM SEKARANG!</b> untuk pengiriman instan, atau ⏱️ <b>JADWALKAN BLAST</b> untuk pengiriman terjadwal.\n` +
-    `3. Bot akan mengirim antrean awal sesuai sisa kuota harian Gmail kamu.\n` +
-    `4. Jika kuota habis, sisa antrean akan otomatis dijadwalkan ulang 24 jam kemudian. Bot akan mengirim laporan otomatis setelah selesai.\n\n` +
-    `💡 <b>Tips Anti-Spam:</b> Gunakan fitur Spintax {Kata1|Kata2|Kata3} pada subjek dan isi pesan untuk membuat setiap email berbeda.`,
-    { parse_mode: 'HTML' }
-  );
-  
-  // Kirim menu utama lagi setelah tutorial
-  const sentMenu = await ctx.reply('Silahkan pilih menu kembali:', mainMenu);
-  session.lastMsgId = sentMenu.message_id;
-});
-
-// Setting GAS Endpoint
 bot.action('set_gas', async (ctx) => {
   const session = getSession(ctx.from.id);
   session.step = 'AWAIT_GAS_URL';
   ctx.answerCbQuery();
   await clearPrevMsg(ctx, session);
-
-  const sent = await ctx.reply('🔗 Tempelkan Link Web App Google Apps Script Kamu di sini:', Markup.inlineKeyboard([
-    [Markup.button.callback('❌ BATALKAN', 'cancel')]
-  ]));
+  const sent = await ctx.reply('🔗 Tempelkan Link Web App Google Apps Script Kamu (/exec):', Markup.inlineKeyboard([[Markup.button.callback('❌ BATALKAN', 'cancel')]]));
   session.lastMsgId = sent.message_id;
 });
 
-// Start Blast Email Process
+// MEMULAI BLAST - Perubahan Teks Instruksi
 bot.action('start_blast', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
 
   if (!session.gasUrl) {
     await clearPrevMsg(ctx, session);
-    const sent = await ctx.reply('⚠️ Webhook GAS belum di-set! Klik "⚙️ SETTING WEBHOOK GAS" terlebih dahulu.', mainMenu);
+    const sent = await ctx.reply('⚠️ Webhook GAS belum di-set!', mainMenu);
     session.lastMsgId = sent.message_id;
     return;
   }
 
-  session.step = 'AWAIT_RECIPIENTS';
-  await clearPrevMsg(ctx, session);
-
-  const sent = await ctx.reply('📧 Masukkan daftar email target (pisahkan dengan koma):\n\nContoh: email1@gmail.com, email2@gmail.com\n\n(Maksimal 500 email)', Markup.inlineKeyboard([
-    [Markup.button.callback('❌ BATALKAN', 'cancel')]
-  ]));
-  session.lastMsgId = sent.message_id;
-});
-
-// Cek Sesi
-bot.action('view_session', async (ctx) => {
-  const session = getSession(ctx.from.id);
-  ctx.answerCbQuery();
+  session.step = 'AWAIT_RECIPIENTS_FILE'; // Step baru
   await clearPrevMsg(ctx, session);
 
   const sent = await ctx.reply(
-    `📊 STATUS SESI SAAT INI:\n\n` +
-    `• GAS URL: ${session.gasUrl ? '✅ Terhubung' : '❌ Belum Di-set'}\n` +
-    `• Target Email: ${session.recipients ? session.recipients.length + ' Alamat' : '0'}\n` +
-    `• Nama Pengirim: ${session.senderName || '❌ Belum Di-set'}\n` +
-    `• Subject Email: ${session.subject ? '✅ Terisi' : '❌ Kosong'}\n` +
-    `• Lampiran PDF: ${session.pdf ? '✅ ' + session.pdf.name : '❌ Tanpa Lampiran'}`,
-    mainMenu
+    '📧 <b>Masukkan Daftar Email Target (Max 500)</b>\n\n' +
+    'Silahkan <b>UPLOAD FILE CSV atau EXCEL</b> (.xlsx) berisi daftar email.\n\n' +
+    '<i>Asumsi: Email berada di kolom pertama.</i>',
+    { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ BATALKAN', 'cancel')]]) }
   );
   session.lastMsgId = sent.message_id;
 });
 
-// Reset Data Sesi
-bot.action('reset_session', async (ctx) => {
+// Handler Files (PDF Lampiran & CSV/Excel Target)
+bot.on('document', async (ctx) => {
   const session = getSession(ctx.from.id);
-  userSessions[ctx.from.id] = { step: 'IDLE', isProcessing: false };
-  ctx.answerCbQuery('Sesi Di-reset!');
+  const doc = ctx.message.document;
+  try { await ctx.deleteMessage(ctx.message.message_id); } catch(e){}
+
+  if (session.step === 'AWAIT_RECIPIENTS_FILE') {
+    // Proses File Target Email
+    if (!doc.file_name.endsWith('.csv') && !doc.file_name.endsWith('.xlsx')) {
+      const sent = await ctx.reply('❌ File harus .csv atau .xlsx! Upload ulang:');
+      session.lastMsgId = sent.message_id;
+      return;
+    }
+    
+    await clearPrevMsg(ctx, session);
+    ctx.reply('⏳ Sedang membaca file email...');
+    const emails = await extractEmailsFromFile(ctx, doc.file_id);
+    if (!emails || emails.length === 0) return ctx.reply('❌ Gagal membaca email dari file atau file kosong.', mainMenu);
+    if (emails.length > 500) return ctx.reply(`❌ Gagal: Maksimal total email adalah 500. File kamu berisi ${emails.length} email.`, mainMenu);
+
+    session.recipients = emails;
+    session.step = 'AWAIT_SENDER_NAME';
+    await clearPrevMsg(ctx, session);
+    ctx.reply(`✅ Berhasil membaca ${emails.length} email target.\n\n👤 Masukkan Nama Pengirim (Sender Name):`);
+  
+  } else if (session.step === 'AWAIT_PDF') {
+    // Proses PDF Lampiran (Seperti biasa)
+    if (doc.mime_type !== 'application/pdf') return ctx.reply('❌ Harus PDF!');
+    try {
+      const fileLink = await ctx.telegram.getFileLink(doc.file_id);
+      session.pdf = { url: fileLink.href, name: doc.file_name };
+      session.step = 'CONFIRMATION';
+      showConfirmation(ctx, session);
+    } catch (err) { ctx.reply(`🚨 PDF Error: ${err.message}`); }
+  }
+});
+
+// Handler Text Input (Sender Name, Subject, Body)
+bot.on('text', async (ctx) => {
+  const session = getSession(ctx.from.id);
+  const text = ctx.message.text;
+  if (text.startsWith('/')) return; // Ignore commands
+  try { await ctx.deleteMessage(ctx.message.message_id); } catch(e){}
+
+  switch (session.step) {
+    case 'AWAIT_GAS_URL':
+      if (!text.startsWith('https://script.google.com/')) return ctx.reply('❌ URL Salah!');
+      session.gasUrl = text; session.step = 'IDLE';
+      ctx.reply('✅ GAS URL Disimpan!', mainMenu);
+      break;
+    case 'AWAIT_SENDER_NAME':
+      session.senderName = text; session.step = 'AWAIT_SUBJECT';
+      ctx.reply('📝 Masukkan Subject Email:\n💡 Gunakan {Hi|Halo} Spintax');
+      break;
+    case 'AWAIT_SUBJECT':
+      session.subject = text; session.step = 'AWAIT_BODY';
+      ctx.reply('💬 Masukkan Isi Pesan:\n💡 Gunakan {Pagi|Siang} Spintax');
+      break;
+    case 'AWAIT_BODY':
+      session.body = text; session.step = 'AWAIT_PDF';
+      ctx.reply('📎 Upload File PDF Lampiran (Max 10MB) atau klik SKIP:', Markup.inlineKeyboard([[Markup.button.callback('⏭️ SKIP LAMPIRAN', 'skip_pdf')], [Markup.button.callback('❌ BATALKAN', 'cancel')]]));
+      break;
+  }
+});
+
+bot.action('execute_blast', async (ctx) => {
+  const session = getSession(ctx.from.id);
+  if (session.isProcessing) return ctx.answerCbQuery('⚠️ Sedang berjalan...');
+  session.isProcessing = true;
+  ctx.answerCbQuery();
   await clearPrevMsg(ctx, session);
 
-  const sent = await ctx.reply('🧹 Sesi berhasil dibersihkan kembali.', mainMenu);
-  userSessions[ctx.from.id].lastMsgId = sent.message_id;
+  try {
+    const payload = { chatId: ctx.from.id, botToken: BOT_TOKEN, recipients: session.recipients, senderName: session.senderName, subject: session.subject, body: session.body, pdfUrl: session.pdf ? session.pdf.url : null, pdfName: session.pdf ? session.pdf.name : null };
+    await axios.post(session.gasUrl, payload, { timeout: 0 }); // Asinkron
+    ctx.reply(`✅ Diterima! GAS akan memproses antrean email secara bertahap.\nLaporan akhir dikirim otomatis ke sini.`, mainMenu);
+  } catch (err) { ctx.reply(`🚨 GAS Error: ${err.message}`); }
+  finally { session.isProcessing = false; session.step = 'IDLE'; }
+});
+
+// Common Actions
+bot.action('skip_pdf', async (ctx) => {
+  const session = getSession(ctx.from.id);
+  session.pdf = null; session.step = 'CONFIRMATION';
+  ctx.answerCbQuery();
+  showConfirmation(ctx, session);
+});
+
+bot.action('view_session', async (ctx) => {
+  const session = getSession(ctx.from.id);
+  ctx.answerCbQuery();
+  ctx.reply(`📊 Sesi:\nGAS URL: ${session.gasUrl ? '✅' : '❌'}\nRecipients: ${session.recipients.length}\nPDF: ${session.pdf ? session.pdf.name : '❌'}`, mainMenu);
+});
+
+bot.action('reset_session', async (ctx) => {
+  const session = getSession(ctx.from.id);
+  userSessions[ctx.from.id] = { step: 'IDLE', isProcessing: false, recipients: [], senderName: '', subject: '', body: '', pdf: null, gasUrl: session.gasUrl };
+  ctx.answerCbQuery('Sesi Di-reset!');
+  ctx.reply('🧹 Sesi (selain GAS URL) dibersihkan.', mainMenu);
 });
 
 bot.action('cancel', async (ctx) => {
   const session = getSession(ctx.from.id);
   session.step = 'IDLE';
   ctx.answerCbQuery('Dibatalkan');
-  await clearPrevMsg(ctx, session);
-
-  const sent = await ctx.reply('❌ Proses dibatalkan.', mainMenu);
-  session.lastMsgId = sent.message_id;
-});
-
-// Handler Lampiran PDF (Direct URL, tanpa Base64 overhead)
-bot.on('document', async (ctx) => {
-  const session = getSession(ctx.from.id);
-  if (session.step !== 'AWAIT_PDF') return;
-
-  const doc = ctx.message.document;
-  try { await ctx.deleteMessage(ctx.message.message_id); } catch(e){}
-  await clearPrevMsg(ctx, session);
-
-  if (doc.mime_type !== 'application/pdf') {
-    const sent = await ctx.reply('❌ File harus berformat PDF! Silahkan upload ulang:', Markup.inlineKeyboard([
-      [Markup.button.callback('❌ BATALKAN', 'cancel')]
-    ]));
-    session.lastMsgId = sent.message_id;
-    return;
-  }
-
-  try {
-    const fileLink = await ctx.telegram.getFileLink(doc.file_id);
-    
-    session.pdf = {
-      url: fileLink.href,
-      name: doc.file_name
-    };
-
-    session.step = 'CONFIRMATION';
-    await showConfirmation(ctx, session);
-  } catch (err) {
-    const sentErr = await ctx.reply(`🚨 Gagal mengambil file PDF: ${err.message}`, mainMenu);
-    session.lastMsgId = sentErr.message_id;
-  }
-});
-
-bot.on('text', async (ctx) => {
-  const session = getSession(ctx.from.id);
-  const text = ctx.message.text;
-
-  try { await ctx.deleteMessage(ctx.message.message_id); } catch(e){}
-
-  switch (session.step) {
-    case 'AWAIT_GAS_URL':
-      await clearPrevMsg(ctx, session);
-      if (!text.startsWith('https://script.google.com/')) {
-        const sent = await ctx.reply('❌ URL Tidak Valid! Harus diawali dengan https://script.google.com/');
-        session.lastMsgId = sent.message_id;
-        return;
-      }
-      session.gasUrl = text;
-      session.step = 'IDLE';
-      const sentGas = await ctx.reply('✅ Endpoint Google Apps Script Berhasil Disimpan!', mainMenu);
-      session.lastMsgId = sentGas.message_id;
-      break;
-
-    case 'AWAIT_RECIPIENTS':
-      await clearPrevMsg(ctx, session);
-      session.recipients = text.split(',').map(e => e.trim()).filter(e => e.length > 0);
-      
-      if (session.recipients.length > 500) {
-        const sentErr = await ctx.reply('❌ Total email melebihi maksimal (500)! Silahkan masukkan ulang daftar email:', Markup.inlineKeyboard([
-          [Markup.button.callback('❌ BATALKAN', 'cancel')]
-        ]));
-        session.lastMsgId = sentErr.message_id;
-        session.recipients = null;
-        return;
-      }
-      
-      session.step = 'AWAIT_SENDER_NAME';
-      const sentName = await ctx.reply('👤 Masukkan Nama Pengirim (Sender Name):\n\nContoh: HRD PT Makmur');
-      session.lastMsgId = sentName.message_id;
-      break;
-
-    case 'AWAIT_SENDER_NAME':
-      await clearPrevMsg(ctx, session);
-      session.senderName = text;
-      session.step = 'AWAIT_SUBJECT';
-      const sentSub = await ctx.reply('📝 Masukkan Subject Email:\n\n💡 Fitur Spintax: {Halo|Hi|PentingPenawaran Kerjasama Penjualan Sepatu}');
-      session.lastMsgId = sentSub.message_id;
-      break;
-
-    case 'AWAIT_SUBJECT':
-      await clearPrevMsg(ctx, session);
-      session.subject = text;
-      session.step = 'AWAIT_BODY';
-      const sentBody = await ctx.reply('💬 Masukkan Isi Pesan Email:\n\n💡 Fitur Spintax: {Selamat Pagi|Halo Kak}, kami dari tim...');
-      session.lastMsgId = sentBody.message_id;
-      break;
-
-    case 'AWAIT_BODY':
-      await clearPrevMsg(ctx, session);
-      session.body = text;
-      session.step = 'AWAIT_PDF';
-      const sentPdf = await ctx.reply('📎 Upload File PDF Lampiran (Maksimal 10MB):\n\nAtau klik tombol Skip jika tanpa lampiran.', Markup.inlineKeyboard([
-        [Markup.button.callback('⏭️ SKIP LAMPIRAN', 'skip_pdf')],
-        [Markup.button.callback('❌ BATALKAN', 'cancel')]
-      ]));
-      session.lastMsgId = sentPdf.message_id;
-      break;
-
-    case 'AWAIT_SCHEDULE_TIME':
-      await clearPrevMsg(ctx, session);
-      // Validasi format waktu (misal: 2023-12-31 09:00)
-      const dateRegex = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
-      if (!dateRegex.test(text)) {
-        const sentErr = await ctx.reply('❌ Format waktu salah! Masukkan dalam format: TTTT-BB-HH JJ:MM\n\nContoh: 2023-12-31 09:00');
-        session.lastMsgId = sentErr.message_id;
-        return;
-      }
-
-      // Simpan waktu jadwal
-      session.scheduledTime = text;
-      session.step = 'CONFIRMATION';
-      await showConfirmation(ctx, session);
-      break;
-  }
-});
-
-bot.action('skip_pdf', async (ctx) => {
-  const session = getSession(ctx.from.id);
-  session.pdf = null;
-  session.step = 'CONFIRMATION';
-  ctx.answerCbQuery();
-  await clearPrevMsg(ctx, session);
-  await showConfirmation(ctx, session);
-});
-
-// Pintu Masuk Menuju Fitur Penjadwalan
-bot.action('schedule_blast', async (ctx) => {
-  const session = getSession(ctx.from.id);
-  ctx.answerCbQuery();
-  await clearPrevMsg(ctx, session);
-  
-  session.step = 'AWAIT_SCHEDULE_TIME';
-  const sent = await ctx.reply('⏱️ Masukkan waktu pengiriman dalam format TTTT-BB-HH JJ:MM (Contoh: 2023-12-31 09:00):');
-  session.lastMsgId = sent.message_id;
+  ctx.reply('❌ Proses dibatalkan.', mainMenu);
 });
 
 async function showConfirmation(ctx, session) {
-  const estSeconds = session.recipients.length * 15;
-  const estMinutes = Math.ceil(estSeconds / 60);
-
-  const sent = await ctx.reply(
-    `🔥 KONFIRMASI PENGIRIMAN EMAIL 🔥\n\n` +
-    `🎯 Jumlah Target: ${session.recipients.length} Email (Maks 500)\n` +
-    `👤 Nama Pengirim: ${session.senderName}\n` +
+  await ctx.reply(
+    `🔥 KONFIRMASI PENGIRIMAN EMAIL MASSAL 🔥\n\n` +
+    `🎯 Target: ${session.recipients.length} Email (Dari File)\n` +
+    `👤 Pengirim: ${session.senderName}\n` +
     `📌 Subject: ${session.subject}\n` +
-    `📎 Lampiran: ${session.pdf ? session.pdf.name : 'Tanpa Lampiran'}\n\n` +
-    (session.scheduledTime ? `🗓️ Waktu Jadwal: <b>${session.scheduledTime}</b>` : `⏳ Estimasi Waktu: ~${estMinutes} Menit (Safe Delay 10s-20s/email)`) +
-    `🛡️ Mode Anti-Spam & Smart-Quota Aktif! Email dipastikan aman tembus Inbox Utama.`,
-    {
-      parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [
-          [Markup.button.callback('🚀 KIRIM SEKARANG!', 'execute_blast_now')],
-          [Markup.button.callback('⏱️ JADWALKAN BLAST', 'schedule_blast')],
-          [Markup.button.callback('❌ BATALKAN', 'cancel')]
-        ]
-      }
-    }
+    `📎 Lampiran: ${session.pdf ? session.pdf.name : '❌'}\n\n` +
+    `💡 Mode Safe Delay & Anti-Spam Aktif.`,
+    Markup.inlineKeyboard([[Markup.button.callback('🚀 KIRIM SEKARANG!', 'execute_blast')], [Markup.button.callback('❌ BATALKAN', 'cancel')]])
   );
-  session.lastMsgId = sent.message_id;
 }
-
-bot.action('execute_blast_now', async (ctx) => {
-  await executeBlastInternal(ctx, null);
-});
-
-bot.action('view_tutorial_exec', async (ctx) => {
-  executeBlastInternal(ctx, null);
-});
-
-async function executeBlastInternal(ctx, scheduledTime = null) {
-  const session = getSession(ctx.from.id);
-
-  if (session.isProcessing) {
-    return ctx.answerCbQuery('⚠️ Pengiriman sedang berjalan! Mohon tunggu laporan selesai...', { show_alert: true });
-  }
-
-  session.isProcessing = true;
-  ctx.answerCbQuery();
-  await clearPrevMsg(ctx, session);
-
-  try {
-    const payload = {
-      action: 'queue_blast', // Tentukan action untuk router di GAS
-      chatId: ctx.from.id,
-      botToken: BOT_TOKEN,
-      recipients: session.recipients,
-      senderName: session.senderName,
-      subject: session.subject,
-      body: session.body,
-      pdfUrl: session.pdf ? session.pdf.url : null,
-      pdfName: session.pdf ? session.pdf.name : null,
-      scheduledTime: scheduledTime // Jika null, kirim instan
-    };
-
-    // Respon dari GAS sekarang kilat (< 1 detik) karena asinkron
-    await axios.post(session.gasUrl, payload, { timeout: 10000 });
-
-  } catch (err) {
-    const sentErr = await ctx.reply(`🚨 Gagal terhubung ke GAS: ${err.message}`, mainMenu);
-    session.lastMsgId = sentErr.message_id;
-  } finally {
-    session.isProcessing = false;
-    session.step = 'IDLE';
-    session.scheduledTime = null; // Reset jadwal
-  }
-}
-
-// Handler khusus untuk tombol tutorial yang bisa dieksekusi ulang
-bot.on('callback_query', async (ctx) => {
-  const session = getSession(ctx.from.id);
-  const callbackData = ctx.callbackQuery.data;
-
-  // Lanjutkan eksekusi dari tutorial konfirmasi ke executeBlastInternal
-  if (callbackData === 'execute_blast_tutorial') {
-    executeBlastInternal(ctx, null);
-  } else if (callbackData === 'schedule_blast_tutorial') {
-    // Tampilkan tutorial penjadwalan sederhana
-    ctx.answerCbQuery();
-    await ctx.reply('⏱️ Tutorial Jadwal: Pilih tombol Jadwalkan di menu konfirmasi, lalu masukkan waktu dalam format TTTT-BB-HH JJ:MM.');
-  }
-});
 
 module.exports = async (req, res) => {
-  try {
-    if (req.method === 'POST') {
-      if (req.body) {
-        await bot.handleUpdate(req.body);
-      }
-      res.status(200).send('OK');
-    } else {
-      res.status(200).send('Telegram Emailer Bot is Active!');
-    }
-  } catch (err) {
-    console.error('SERVERLESS ERROR:', err);
-    res.status(200).send('Error Handled');
-  }
+  try { if (req.method === 'POST') { if (req.body) await bot.handleUpdate(req.body); res.status(200).send('OK'); } else res.status(200).send('Active!'); }
+  catch (err) { res.status(200).send('Error'); }
 };
