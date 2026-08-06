@@ -1,9 +1,19 @@
 {
-  "name": "telegram-gas-mailer",
+  "name": "telegram-emailer-bot",
   "version": "1.0.0",
+  "description": "Bot Telegram untuk Email Blast massal via Google Apps Script asinkron.",
   "main": "api/bot.js",
   "dependencies": {
-    "axios": "^1.7.2",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.12.0",
+    "axios": "^1.4.0",
+    "csv-parser": "^3.0.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.19.3/xlsx-0.19.3.tgz"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "scripts": {
+    "start": "node api/bot.js",
+    "dev": "nodemon api/bot.js"
   }
 }
