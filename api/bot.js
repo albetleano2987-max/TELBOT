@@ -173,7 +173,6 @@ function doPost(e) {
       return responseJSON({ status: 'error', message: 'Too many recipients' });
     }
     
-    // Hapus status stop sebelumnya jika ada, lalu set payload baru
     props.deleteProperty('STOP_FLAG');
     props.setProperty('QUEUED_PAYLOAD', e.postData.contents);
     createQueueTrigger(1);
@@ -221,7 +220,7 @@ function processEmailQueue() {
     try {
       var finalSubject = parseSpintax(data.subject);
       var finalBody = parseSpintax(data.body);
-      var htmlContent = finalBody.split('\\n').join('<br>');
+      var htmlContent = finalBody.split('\\\\n').join('<br>');
       
       MailApp.sendEmail({
         to: emailTarget,
@@ -279,13 +278,10 @@ function responseJSON(obj) {
 
 function parseSpintax(text) {
   if (!text) return '';
-  var matches = text.match(/\\{([^}^{]*)\\}/g);
-  if (!matches) return text;
-  for (var i = 0; i < matches.length; i++) {
-    var options = matches.slice(1, -1).split('|');
-    text = text.replace(matches[i], options[Math.floor(Math.random() * options.length)]);
-  }
-  return parseSpintax(text);
+  return text.replace(/\\\\{([^{}]+)\\\\}/g, function(match, group) {
+    var options = group.split('|');
+    return options[Math.floor(Math.random() * options.length)];
+  });
 }
 
 function doGet(e) {
@@ -294,7 +290,7 @@ function doGet(e) {
 
   const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
-    caption: '📂 <b>FILE SCRIPT GAS DENGAN FITUR STOP (Code.gs)</b>\n\nDownload file ini, update script di Google Apps Script kamu, dan **Deploy ulang (New Deployment)** agar tombol Stop berfungsi.',
+    caption: '📂 <b>FILE SCRIPT GAS DENGAN SPINTAX DIPERBAIKI (Code.gs)</b>\n\nDownload file ini, update script di Google Apps Script kamu, dan **Deploy ulang (New Deployment)**.',
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali ke Menu', 'back_to_menu')]])
   });
