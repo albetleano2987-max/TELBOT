@@ -141,17 +141,133 @@ bot.action('start_blast', async (ctx) => {
 bot.action('get_gas_script', async (ctx) => {
   const session = getSession(ctx.from.id);
   try {
-    await ctx.answerCbQuery('Membuka link script...');
+    await ctx.answerCbQuery('Menampilkan script GAS...');
   } catch (e) {}
 
   await clearBotMsg(ctx, session);
+
+  await ctx.reply(
+    `📜 <b>SCRIPT GOOGLE APPS SCRIPT (GAS)</b>\n\n` +
+    `<i>Ketuk/tekan kotak kode di bawah untuk menyalin seluruh kodenya:</i>`,
+    { parse_mode: 'HTML' }
+  );
+
+  const gasCodeText = 
+`var MAX_TOTAL_BLAST = 1000;
+var BATCH_CHUNK_LIMIT = 28;
+
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) return responseJSON({ status: 'error', message: 'Payload kosong' });
+    var data = JSON.parse(e.postData.contents);
+    var recipients = data.recipients || [];
+    if (recipients.length > MAX_TOTAL_BLAST) {
+      sendTelegramMessage(data.botToken, data.chatId, '❌ Gagal: Maksimal total email adalah ' + MAX_TOTAL_BLAST + '.');
+      return responseJSON({ status: 'error', message: 'Too many recipients' });
+    }
+    PropertiesService.getScriptProperties().setProperty('QUEUED_PAYLOAD', e.postData.contents);
+    createQueueTrigger(1);
+    return responseJSON({ status: 'success', message: 'Antrean berhasil dibuat!' });
+  } catch (errMain) {
+    return responseJSON({ status: 'error', message: 'System Error: ' + errMain.message });
+  }
+}
+
+function processEmailQueue() {
+  deleteOldTriggers('processEmailQueue');
+  var props = PropertiesService.getScriptProperties();
+  var payloadRaw = props.getProperty('QUEUED_PAYLOAD');
+  if (!payloadRaw) return;
+  var data = JSON.parse(payloadRaw);
+  var recipients = data.recipients || [];
+  var remainingQuota = MailApp.getRemainingDailyQuota();
+  if (remainingQuota <= 0) {
+    sendTelegramMessage(data.botToken, data.chatId, '⚠️ Kuota Gmail Hari ini Habis!');
+    createQueueTrigger(24 * 60);
+    return;
+  }
+  var maxCanSendNow = Math.min(BATCH_CHUNK_LIMIT, remainingQuota);
+  var toSendNowCount = Math.min(recipients.length, maxCanSendNow);
+  var recipientsNow = recipients.slice(0, toSendNowCount);
+  var recipientsRemaining = recipients.slice(toSendNowCount);
+  var sentCount = 0;
+  var attachments = [];
+  if (data.pdfUrl && data.pdfName) {
+    try {
+      var response = UrlFetchApp.fetch(data.pdfUrl, { muteHttpExceptions: true });
+      if (response.getResponseCode() === 200) attachments.push(response.getBlob().setName(data.pdfName));
+    } catch (e) {}
+  }
+  for (var j = 0; j < recipientsNow.length; j++) {
+    var emailTarget = recipientsNow[j].trim();
+    if (!emailTarget) continue;
+    try {
+      var finalSubject = parseSpintax(data.subject);
+      var finalBody = parseSpintax(data.body);
+      var htmlContent = finalBody.replace(/\\n/g, '<br>') + generateAntiSpamFootprint();
+      MailApp.sendEmail({ to: emailTarget, subject: finalSubject, htmlBody: htmlContent, name: data.senderName, attachments: attachments });
+      sentCount++;
+      if (j < recipientsNow.length - 1) Utilities.sleep(Math.floor(Math.random() * (15000 - 10000 + 1) + 10000));
+    } catch (err) {}
+  }
+  if (recipientsRemaining.length > 0) {
+    data.recipients = recipientsRemaining;
+    props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
+    if (MailApp.getRemainingDailyQuota() > 0) {
+      sendTelegramMessage(data.botToken, data.chatId, '⏳ Batch Terkirim: ' + sentCount + ' email.');
+      createQueueTrigger(1);
+    }
+  } else {
+    props.deleteProperty('QUEUED_PAYLOAD');
+    sendTelegramMessage(data.botToken, data.chatId, '✅ SEMUA ANTREAN SELESAI!');
+  }
+}
+
+function createQueueTrigger(minutes) {
+  ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes * 60 * 1000).create();
+}
+
+function deleteOldTriggers(functionName) {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === functionName) ScriptApp.deleteTrigger(triggers[i]);
+  }
+}
+
+function sendTelegramMessage(token, chatid, text) {
+  UrlFetchApp.fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
+    method: 'post', contentType: 'application/json',
+    payload: JSON.stringify({ chat_id: chatid, text: text, parse_mode: 'HTML' }), muteHttpExceptions: true
+  });
+}
+
+function responseJSON(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
+
+function parseSpintax(text) {
+  if (!text) return '';
+  var matches = text.match(/\\{([^}^{]*)\\}/g);
+  if (!matches) return text;
+  for (var i = 0; i < matches.length; i++) {
+    var options = matches[i].slice(1, -1).split('|');
+    text = text.replace(matches[i], options[Math.floor(Math.random() * options.length)]);
+  }
+  return parseSpintax(text);
+}
+
+function generateAntiSpamFootprint() {
+  var chars = ['\\u200B', '\\u200C', '\\u200D', '\\uFEFF'];
+  var footprint = '<div style="display:none; font-size:0px; color:transparent; opacity:0;">';
+  for (var i = 0; i < 15; i++) footprint += chars[Math.floor(Math.random() * chars.length)];
+  return footprint + '</div>';
+}
+
+function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
+
   const sent = await ctx.reply(
-    `📜 <b>SCRIPT GOOGLE APPS SCRIPT</b>\n\n` +
-    `Silakan klik tombol di bawah untuk menyalin script melalui web browser:`,
+    `\`\`\`javascript\n${gasCodeText}\n\`\`\``,
     {
-      parse_mode: 'HTML',
+      parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.url('🌐 BUKA & SALIN SCRIPT GAS', 'https://pastebin.com/raw/5J8U0Z1v')],
         [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
       ])
     }
@@ -167,7 +283,7 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
-    `2️⃣ Klik tombol <b>📜 AMBIL SCRIPT GAS</b> di bot ini untuk membuka web salin script.\n` +
+    `2️⃣ Klik tombol <b>📜 AMBIL SCRIPT GAS</b> di bot ini untuk memunculkan kode script.\n` +
     `3️⃣ Salin dan tempel kodenya ke editor <code>Code.gs</code>.\n` +
     `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih <b>Web app</b>.\n` +
     `5️⃣ Atur <b>Execute as</b>: <i>Me</i> & <b>Who has access</b>: <i>Anyone</i>.\n` +
