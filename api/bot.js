@@ -257,7 +257,6 @@ function generateAntiSpamFootprint() {
 
 function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
 
-  // Bungkus dalam format file HTML lengkap
   const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
