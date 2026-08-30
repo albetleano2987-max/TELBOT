@@ -146,8 +146,8 @@ bot.action('get_gas_script', async (ctx) => {
 
   await clearBotMsg(ctx, session);
 
-  const scriptCode = 
-`var MAX_TOTAL_BLAST = 1000;
+  // Script GAS versi bersih tanpa escape berlebih
+  const rawGasScript = `var MAX_TOTAL_BLAST = 1000;
 var BATCH_CHUNK_LIMIT = 28;
 
 function doPost(e) {
@@ -264,14 +264,35 @@ function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
 <title>Google Apps Script Code</title>
 <style>
   body { background-color: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 20px; }
-  pre { white-space: pre-wrap; word-wrap: break-word; }
+  pre { background: #2d2d2d; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
+  button { background: #0e639c; color: white; border: none; padding: 14px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 15px; }
+  button:active { background: #1177bb; }
+  .success { background: #28a745 !important; }
 </style>
 </head>
 <body>
-<h3>Script Google Apps Script (GAS)</h3>
-<p>Salin seluruh teks kode JavaScript di bawah ini ke editor project Google Apps Script kamu:</p>
+<h3>Google Apps Script (GAS) Code</h3>
+<button id="copyBtn" onclick="copyCode()">📋 SALIN SEMUA KODE</button>
+<p>Klik tombol di atas, lalu paste (tempel) ke editor Google Apps Script kamu.</p>
 <hr>
-<pre><code>${scriptCode}</code></pre>
+<pre><code id="codeBlock">${rawGasScript}</code></pre>
+
+<script>
+function copyCode() {
+  const codeText = document.getElementById('codeBlock').innerText;
+  navigator.clipboard.writeText(codeText).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.innerText = '✅ BERHASIL DISALIN! SILAHKAN PASTE';
+    btn.classList.add('success');
+    setTimeout(() => {
+      btn.innerText = '📋 SALIN SEMUA KODE';
+      btn.classList.remove('success');
+    }, 3000);
+  }).catch(err => {
+    alert('Gagal menyalin otomatis, salin manual dari bawah ya: ' + err);
+  });
+}
+</script>
 </body>
 </html>`;
 
@@ -280,7 +301,7 @@ function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
   await ctx.replyWithDocument(
     { source: fileBuffer, filename: 'script-gas.html' },
     {
-      caption: '📄 <b>FILE HTML SCRIPT GAS</b>\n\nBuka file HTML ini di browser atau text editor untuk menyalin kodenya dengan mudah!',
+      caption: '📄 <b>FILE HTML SCRIPT GAS (UPDATE)</b>\n\nBuka file HTML ini di Chrome/Browser HP kamu, lalu klik tombol **SALIN SEMUA KODE**!',
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
@@ -298,8 +319,8 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
-    `2️⃣ Klik tombol <b>📜 AMBIL SCRIPT GAS</b> untuk mendownload file <code>script-gas.html</code>.\n` +
-    `3️⃣ Buka file HTML tersebut, salin kodenya, lalu tempel ke editor Google Apps Script.\n` +
+    `2️⃣ Klik <b>📜 AMBIL SCRIPT GAS</b> dan download filenya.\n` +
+    `3️⃣ Buka file HTML tersebut di browser HP, klik tombol <b>SALIN SEMUA KODE</b>, lalu paste ke editor GAS.\n` +
     `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih <b>Web app</b>.\n` +
     `5️⃣ Atur <b>Execute as</b>: <i>Me</i> & <b>Who has access</b>: <i>Anyone</i>.\n` +
     `6️⃣ Salin URL Web App dan masukkan ke bot via <b>⚙️ SETTING WEBHOOK GAS</b>.`,
