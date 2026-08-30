@@ -139,35 +139,27 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Handler untuk generate dan mengirim file PDF berisi script GAS secara otomatis
+// Handler PDF 1 Halaman
 bot.action('get_gas_script', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
   await clearBotMsg(ctx, session);
 
   const gasCodeText = 
-`// ====== KONFIGURASI GAS ======
-var MAX_TOTAL_BLAST = 1000;
+`var MAX_TOTAL_BLAST = 1000;
 var BATCH_CHUNK_LIMIT = 28;
 
 function doPost(e) {
   try {
-    if (!e || !e.postData || !e.postData.contents) {
-      return responseJSON({ status: 'error', message: 'Payload kosong' });
-    }
-    
+    if (!e || !e.postData || !e.postData.contents) return responseJSON({ status: 'error', message: 'Payload kosong' });
     var data = JSON.parse(e.postData.contents);
     var recipients = data.recipients || [];
-    
     if (recipients.length > MAX_TOTAL_BLAST) {
       sendTelegramMessage(data.botToken, data.chatId, '❌ Gagal: Maksimal total email adalah ' + MAX_TOTAL_BLAST + '.');
       return responseJSON({ status: 'error', message: 'Too many recipients' });
     }
-    
-    var props = PropertiesService.getScriptProperties();
-    props.setProperty('QUEUED_PAYLOAD', e.postData.contents);
+    PropertiesService.getScriptProperties().setProperty('QUEUED_PAYLOAD', e.postData.contents);
     createQueueTrigger(1);
-    
     return responseJSON({ status: 'success', message: 'Antrean berhasil dibuat!' });
   } catch (errMain) {
     return responseJSON({ status: 'error', message: 'System Error: ' + errMain.message });
@@ -179,34 +171,26 @@ function processEmailQueue() {
   var props = PropertiesService.getScriptProperties();
   var payloadRaw = props.getProperty('QUEUED_PAYLOAD');
   if (!payloadRaw) return;
-  
   var data = JSON.parse(payloadRaw);
   var recipients = data.recipients || [];
   var remainingQuota = MailApp.getRemainingDailyQuota();
-  
   if (remainingQuota <= 0) {
     sendTelegramMessage(data.botToken, data.chatId, '⚠️ Kuota Gmail Hari ini Habis!');
     createQueueTrigger(24 * 60);
     return;
   }
-  
   var maxCanSendNow = Math.min(BATCH_CHUNK_LIMIT, remainingQuota);
   var toSendNowCount = Math.min(recipients.length, maxCanSendNow);
   var recipientsNow = recipients.slice(0, toSendNowCount);
   var recipientsRemaining = recipients.slice(toSendNowCount);
-  
   var sentCount = 0;
   var attachments = [];
-  
   if (data.pdfUrl && data.pdfName) {
     try {
       var response = UrlFetchApp.fetch(data.pdfUrl, { muteHttpExceptions: true });
-      if (response.getResponseCode() === 200) {
-        attachments.push(response.getBlob().setName(data.pdfName));
-      }
+      if (response.getResponseCode() === 200) attachments.push(response.getBlob().setName(data.pdfName));
     } catch (e) {}
   }
-  
   for (var j = 0; j < recipientsNow.length; j++) {
     var emailTarget = recipientsNow[j].trim();
     if (!emailTarget) continue;
@@ -214,26 +198,15 @@ function processEmailQueue() {
       var finalSubject = parseSpintax(data.subject);
       var finalBody = parseSpintax(data.body);
       var htmlContent = finalBody.replace(/\\n/g, '<br>') + generateAntiSpamFootprint();
-      
-      MailApp.sendEmail({
-        to: emailTarget,
-        subject: finalSubject,
-        htmlBody: htmlContent,
-        name: data.senderName,
-        attachments: attachments
-      });
+      MailApp.sendEmail({ to: emailTarget, subject: finalSubject, htmlBody: htmlContent, name: data.senderName, attachments: attachments });
       sentCount++;
-      if (j < recipientsNow.length - 1) {
-        Utilities.sleep(Math.floor(Math.random() * (15000 - 10000 + 1) + 10000));
-      }
+      if (j < recipientsNow.length - 1) Utilities.sleep(Math.floor(Math.random() * (15000 - 10000 + 1) + 10000));
     } catch (err) {}
   }
-  
   if (recipientsRemaining.length > 0) {
     data.recipients = recipientsRemaining;
     props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
-    var updatedQuota = MailApp.getRemainingDailyQuota();
-    if (updatedQuota > 0) {
+    if (MailApp.getRemainingDailyQuota() > 0) {
       sendTelegramMessage(data.botToken, data.chatId, '⏳ Batch Terkirim: ' + sentCount + ' email.');
       createQueueTrigger(1);
     }
@@ -243,33 +216,20 @@ function processEmailQueue() {
   }
 }
 
-function createQueueTrigger(minutes) {
-  ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes * 60 * 1000).create();
-}
-
+function createQueueTrigger(minutes) { ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes * 60 * 1000).create(); }
 function deleteOldTriggers(functionName) {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === functionName) {
-      ScriptApp.deleteTrigger(triggers[i]);
-    }
+    if (triggers[i].getHandlerFunction() === functionName) ScriptApp.deleteTrigger(triggers[i]);
   }
 }
-
 function sendTelegramMessage(token, chatid, text) {
-  var url = "https://api.telegram.org/bot" + token + "/sendMessage";
-  UrlFetchApp.fetch(url, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({ chat_id: chatid, text: text, parse_mode: 'HTML' }),
-    muteHttpExceptions: true
+  UrlFetchApp.fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
+    method: 'post', contentType: 'application/json',
+    payload: JSON.stringify({ chat_id: chatid, text: text, parse_mode: 'HTML' }), muteHttpExceptions: true
   });
 }
-
-function responseJSON(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}
-
+function responseJSON(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
 function parseSpintax(text) {
   if (!text) return '';
   var matches = text.match(/\\{([^}^{]*)\\}/g);
@@ -280,32 +240,25 @@ function parseSpintax(text) {
   }
   return parseSpintax(text);
 }
-
 function generateAntiSpamFootprint() {
   var chars = ['\\u200B', '\\u200C', '\\u200D', '\\uFEFF'];
   var footprint = '<div style="display:none; font-size:0px; color:transparent; opacity:0;">';
   for (var i = 0; i < 15; i++) footprint += chars[Math.floor(Math.random() * chars.length)];
   return footprint + '</div>';
 }
-
-function doGet(e) {
-  return ContentService.createTextOutput("GAS Active!");
-}`;
+function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
 
   try {
-    // Generate PDF menggunakan PDFKit di dalam memori buffer
-    const doc = new PDFDocument({ margin: 30, size: 'A4' });
+    // PDF diset margin tipis dan ukuran font 5.5 agar pas 1 halaman
+    const doc = new PDFDocument({ margin: 15, size: 'A4' });
     const buffers = [];
     doc.on('data', buffers.push.bind(buffers));
     doc.on('end', async () => {
       const pdfBuffer = Buffer.concat(buffers);
-      
-      // Kirim file PDF ke Telegram
       await ctx.replyWithDocument(
-        { source: pdfBuffer, filename: 'Script_GAS_Mailblast.pdf' },
+        { source: pdfBuffer, filename: 'Script_GAS_1Page.pdf' },
         {
-          caption: `📄 <b>PDF SCRIPT GAS BERHASIL DIBUAT</b>\n\n` +
-                   `Silakan download file PDF di atas untuk melihat dan menyalin kodenya ke <a href="https://script.google.com/">script.google.com</a>.`,
+          caption: `📄 <b>PDF SCRIPT GAS (1 HALAMAN)</b>\n\nKini ukurannya pas 1 halaman, lebih gampang disalin!`,
           parse_mode: 'HTML',
           ...Markup.inlineKeyboard([
             [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
@@ -314,19 +267,16 @@ function doGet(e) {
       );
     });
 
-    // Desain isi PDF
-    doc.fontSize(14).font('Helvetica-Bold').text('SOURCE CODE GOOGLE APPS SCRIPT (GAS)', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.fontSize(9).font('Courier').text(gasCodeText, {
-      columns: 1,
-      columnGap: 15,
-      align: 'left'
+    doc.fontSize(10).font('Helvetica-Bold').text('GOOGLE APPS SCRIPT (GAS) - MAILBLAST', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(5.5).font('Courier').text(gasCodeText, {
+      lineGap: 0.8
     });
     doc.end();
 
   } catch (err) {
     const sentFallback = await ctx.reply(
-      '❌ Gagal membuat file PDF script.',
+      '❌ Gagal membuat PDF.',
       Markup.inlineKeyboard([[Markup.button.callback('🔙 KEMBALI', 'back_to_menu')]])
     );
     session.lastMsgId = sentFallback.message_id;
@@ -341,12 +291,11 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
-    `2️⃣ Klik tombol <b>AMBIL SCRIPT GAS</b> di menu utama bot ini untuk mendownload file PDF kodenya.\n` +
-    `3️⃣ Tempel (*paste*) kode tersebut ke editor <code>Code.gs</code> di Google Apps Script.\n` +
-    `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih jenis <b>Web app</b>.\n` +
-    `5️⃣ Atur <b>Execute as</b>: <i>Me</i> dan <b>Who has access</b>: <i>Anyone</i>.\n` +
-    `6️⃣ Salin URL Web App (berakhiran <code>/exec</code>).\n` +
-    `7️⃣ Kembali ke bot ini, klik <b>⚙️ SETTING WEBHOOK GAS</b>, lalu kirim URL tersebut.`,
+    `2️⃣ Klik <b>AMBIL SCRIPT GAS</b> untuk mendownload PDF 1 halamannya.\n` +
+    `3️⃣ Salin dan tempel kodenya ke editor <code>Code.gs</code>.\n` +
+    `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih <b>Web app</b>.\n` +
+    `5️⃣ Atur <b>Execute as</b>: <i>Me</i> & <b>Who has access</b>: <i>Anyone</i>.\n` +
+    `6️⃣ Salin URL Web App (berakhiran <code>/exec</code>) dan masukkan ke bot via <b>⚙️ SETTING WEBHOOK GAS</b>.`,
     {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
