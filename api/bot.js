@@ -4,12 +4,25 @@ const csv = require('csv-parser');
 const xlsx = require('xlsx');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
+// Masukkan link Web App GAS kamu di bawah ini agar otomatis terhubung (tidak perlu klik Setting Webhook lagi)
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw.../exec'; // <-- Ganti dengan link GAS /exec kamu
+
 const bot = new Telegraf(BOT_TOKEN || '');
 const userSessions = {};
 
 const getSession = (userId) => {
   if (!userSessions[userId]) {
-    userSessions[userId] = { step: 'IDLE', isProcessing: false, recipients: [], senderName: '', subject: '', body: '', pdf: null, gasUrl: null, lastMsgId: null };
+    userSessions[userId] = { 
+      step: 'IDLE', 
+      isProcessing: false, 
+      recipients: [], 
+      senderName: '', 
+      subject: '', 
+      body: '', 
+      pdf: null, 
+      gasUrl: DEFAULT_GAS_URL, 
+      lastMsgId: null 
+    };
   }
   return userSessions[userId];
 };
@@ -31,7 +44,7 @@ const checkAccessMiddleware = async (ctx, next) => {
   const userId = ctx.from ? ctx.from.id : null;
   if (!userId) return;
 
-  // BYPASS MUTLAK ADMIN UTAMA
+  // BYPASS MUTLAK UNTUK ADMIN UTAMA (ID kamu: 7619665121)
   if (String(userId) === "7619665121") {
     return next();
   }
@@ -44,10 +57,11 @@ const checkAccessMiddleware = async (ctx, next) => {
   const session = getSession(userId);
 
   if (!session.gasUrl) {
-    await ctx.reply('⚠️ Webhook GAS belum di-set oleh Admin. Silakan set dulu via menu.');
+    await ctx.reply('⚠️ Bot belum dikonfigurasi oleh Admin.');
     return;
   }
 
+  // Cek ke Google Apps Script apakah user ini sudah di-ACC
   try {
     const res = await axios.post(session.gasUrl, { action: 'check_access', telegramId: userId }, { timeout: 10000 });
     if (res.data && res.data.allowed) {
@@ -55,9 +69,10 @@ const checkAccessMiddleware = async (ctx, next) => {
     }
   } catch (e) {}
 
+  // Jika belum di-ACC, tampilkan tombol Minta Akses
   await clearBotMsg(ctx, session);
   const sent = await ctx.reply(
-    '⛔ <b>AKSES DITOLAK</b>\n\nKamu belum memiliki izin untuk menggunakan bot Mailblast ini. Silakan klik tombol di bawah untuk meminta akses ke Admin.',
+    '⛔ <b>AKSES DITOLAK</b>\n\nBot ini bersifat privat dan hanya bisa digunakan oleh user yang sudah di-ACC oleh Admin. Silakan klik tombol di bawah untuk meminta akses.',
     {
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([[Markup.button.callback('📩 Minta Akses ke Admin', `request_access_${userId}`)]])
@@ -141,7 +156,7 @@ bot.action(/^acc_user_(.+)$/, async (ctx) => {
   ctx.answerCbQuery('Memproses ACC...');
 
   if (!session.gasUrl) {
-    return ctx.reply('⚠️ Webhook GAS belum diset di sesi admin ini. Set dulu via menu utama.');
+    return ctx.reply('⚠️ Webhook GAS belum diset.');
   }
 
   try {
@@ -233,10 +248,9 @@ bot.action('get_gas_file', async (ctx) => {
   try { await ctx.answerCbQuery('Mengirim file script GAS...'); } catch (e) {}
   await clearBotMsg(ctx, session);
 
-  const cleanGasCode = `// Gunakan script Code.gs lengkap yang sudah disediakan sebelumnya`;
-  const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
+  const fileBuffer = Buffer.from("Gunakan script Code.gs lengkap yang sudah disediakan sebelumnya.", 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
-    caption: '📂 <b>FILE SCRIPT GAS DENGAN WHITELIST</b>\n\nPastikan Google Apps Script kamu sudah menggunakan kode terbaru.',
+    caption: '📂 <b>FILE SCRIPT GAS DENGAN WHITELIST</b>',
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali ke Menu', 'back_to_menu')]])
   });
@@ -252,7 +266,7 @@ bot.action('tutorial_gas', async (ctx) => {
     '1️⃣ Buka <u>script.google.com</u> lalu buat New Project.\n' +
     '2️⃣ Masukkan kode <b>Code.gs</b> terbaru.\n' +
     '3️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n' +
-    '4️⃣ Salin URL Web app ke bot via ⚙️ Setting Webhook.', 
+    '4️⃣ Salin URL Web app ke bot.', 
     {
       parse_mode: 'HTML', disable_web_page_preview: true,
       ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali', 'back_to_menu')]])
