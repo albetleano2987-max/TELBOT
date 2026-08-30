@@ -140,7 +140,7 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Handler untuk mengirimkan script GAS otomatis ke chat Telegram
+// Handler untuk mengirimkan script GAS otomatis (dipecah agar aman dari limit Telegram)
 bot.action('get_gas_script', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
@@ -152,8 +152,8 @@ bot.action('get_gas_script', async (ctx) => {
     { parse_mode: 'HTML', disable_web_page_preview: true }
   );
 
-  const gasCodeText = 
-`// ====== KONFIGURASI GAS ======
+  const part1 = 
+`// ====== KONFIGURASI GAS (BAGIAN 1) ======
 var MAX_TOTAL_BLAST = 1000;
 var BATCH_CHUNK_LIMIT = 28;
 
@@ -248,8 +248,10 @@ function processEmailQueue() {
     props.deleteProperty('QUEUED_PAYLOAD');
     sendTelegramMessage(data.botToken, data.chatId, '✅ SEMUA ANTREAN SELESAI!');
   }
-}
+}`;
 
+  const part2 = 
+`// ====== KONFIGURASI GAS (BAGIAN 2) ======
 function createQueueTrigger(minutes) {
   ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes * 60 * 1000).create();
 }
@@ -299,8 +301,12 @@ function doGet(e) {
   return ContentService.createTextOutput("GAS Active!");
 }`;
 
+  // Kirim bagian 1
+  await ctx.reply(`<pre><code>${part1}</code></pre>`, { parse_mode: 'HTML' });
+
+  // Kirim bagian 2 sekaligus tombol kembali
   const sentFinal = await ctx.reply(
-    `<pre><code>${gasCodeText}</code></pre>`,
+    `<pre><code>${part2}</code></pre>`,
     {
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
