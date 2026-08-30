@@ -57,7 +57,7 @@ const extractEmailsFromFile = async (ctx, docId) => {
 
 const mainMenu = Markup.inlineKeyboard([
   [Markup.button.callback('🚀 BLAST EMAIL MASSAL', 'start_blast')],
-  [Markup.button.callback('📜 AMBIL SCRIPT GAS', 'get_gas_script'), Markup.button.callback('📖 CARA PASANG', 'tutorial_gas')],
+  [Markup.button.callback('📂 DOWNLOAD FILE SCRIPT (.gs)', 'get_gas_file'), Markup.button.callback('📖 CARA PASANG', 'tutorial_gas')],
   [Markup.button.callback('⚙️ SETTING WEBHOOK GAS', 'set_gas')],
   [Markup.button.callback('📊 CEK SESI', 'view_session'), Markup.button.callback('🧹 RESET DATA', 'reset_session')]
 ]);
@@ -66,7 +66,7 @@ bot.start(async (ctx) => {
   const session = getSession(ctx.from.id);
   await clearUserMsg(ctx);
   await clearBotMsg(ctx, session);
-  const sent = await ctx.reply('⚡ <b>MAILBLAST GEN-Z SYSTEM</b> ⚡\n\nBot blast anti-spam dengan Auto Reschedule & UI Clean Mode.\n\nSilahkan pilih menu:', { parse_mode: 'HTML', ...mainMenu });
+  const sent = await ctx.reply('⚡ <b>MAILBLAST GEN-Z SYSTEM</b> ⚡\n\nBot blast anti-spam dengan Auto Reschedule & File Script Aman.\n\nSilahkan pilih menu:', { parse_mode: 'HTML', ...mainMenu });
   session.lastMsgId = sent.message_id;
 });
 
@@ -94,19 +94,148 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-bot.action('get_gas_script', async (ctx) => {
+bot.action('get_gas_file', async (ctx) => {
   const session = getSession(ctx.from.id);
-  try { await ctx.answerCbQuery('Mengirim file HTML script...'); } catch (e) {}
+  try { await ctx.answerCbQuery('Mengirim file script GAS...'); } catch (e) {}
   await clearBotMsg(ctx, session);
 
-  // Script GAS ditulis dalam 1 baris string utuh agar tidak terpotong enter sama sekali oleh template literal
-  const rawGasScript = "var MAX_TOTAL_BLAST=1000;var BATCH_CHUNK_LIMIT=28;function doPost(e){try{if(!e||!e.postData||!e.postData.contents)return responseJSON({status:'error',message:'Payload kosong'});var data=JSON.parse(e.postData.contents);var recipients=data.recipients||[];if(recipients.length>MAX_TOTAL_BLAST){sendTelegramMessage(data.botToken,data.chatId,'❌ Gagal: Maksimal total email adalah '+MAX_TOTAL_BLAST+'.');return responseJSON({status:'error',message:'Too many recipients'});}PropertiesService.getScriptProperties().setProperty('QUEUED_PAYLOAD',e.postData.contents);createQueueTrigger(1);return responseJSON({status:'success',message:'Antrean berhasil dibuat!'});}catch(errMain){return responseJSON({status:'error',message:'System Error: '+errMain.message});}}function processEmailQueue(){deleteOldTriggers('processEmailQueue');var props=PropertiesService.getScriptProperties();var payloadRaw=props.getProperty('QUEUED_PAYLOAD');if(!payloadRaw)return;var data=JSON.parse(payloadRaw);var recipients=data.recipients||[];var remainingQuota=MailApp.getRemainingDailyQuota();if(remainingQuota<=0){sendTelegramMessage(data.botToken,data.chatId,'⚠️ Kuota Gmail Hari ini Habis!');createQueueTrigger(24*60);return;}var maxCanSendNow=Math.min(BATCH_CHUNK_LIMIT,remainingQuota);var toSendNowCount=Math.min(recipients.length,maxCanSendNow);var recipientsNow=recipients.slice(0,toSendNowCount);var recipientsRemaining=recipients.slice(toSendNowCount);var sentCount=0;var attachments=[];if(data.pdfUrl&&data.pdfName){try{var response=UrlFetchApp.fetch(data.pdfUrl,{muteHttpExceptions:true});if(response.getResponseCode()===200)attachments.push(response.getBlob().setName(data.pdfName));}catch(e){}}for(var j=0;j<recipientsNow.length;j++){var emailTarget=recipientsNow[j].trim();if(!emailTarget)continue;try{var finalSubject=parseSpintax(data.subject);var finalBody=parseSpintax(data.body);var htmlContent=finalBody.split(String.fromCharCode(10)).join('<br>')+generateAntiSpamFootprint();MailApp.sendEmail({to:emailTarget,subject:finalSubject,htmlBody:htmlContent,name:data.senderName,attachments:attachments});sentCount++;if(j<recipientsNow.length-1)Utilities.sleep(Math.floor(Math.random()*(15000-10000+1)+10000));}catch(err){}}if(recipientsRemaining.length>0){data.recipients=recipientsRemaining;props.setProperty('QUEUED_PAYLOAD',JSON.stringify(data));if(MailApp.getRemainingDailyQuota()>0){sendTelegramMessage(data.botToken,data.chatId,'⏳ Batch Terkirim: '+sentCount+' email.');createQueueTrigger(1);}}else{props.deleteProperty('QUEUED_PAYLOAD');sendTelegramMessage(data.botToken,data.chatId,'✅ SEMUA ANTREAN SELESAI!');}}function createQueueTrigger(minutes){ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes*60*1000).create();}function deleteOldTriggers(functionName){var triggers=ScriptApp.getProjectTriggers();for(var i=0;i<triggers.length;i++){if(triggers[i].getHandlerFunction()===functionName)ScriptApp.deleteTrigger(triggers[i]);}}function sendTelegramMessage(token,chatid,text){UrlFetchApp.fetch('https://api.telegram.org/bot'+token+'/sendMessage',{method:'post',contentType:'application/json',payload:JSON.stringify({chat_id:chatid,text:text,parse_mode:'HTML'}),muteHttpExceptions:true});}function responseJSON(obj){return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);}function parseSpintax(text){if(!text)return'';var matches=text.match(/\\{([^}^{]*)\\}/g);if(!matches)return text;for(var i=0;i<matches.length;i++){var options=matches[i].slice(1,-1).split('|');text=text.replace(matches[i],options[Math.floor(Math.random()*options.length)]);}return parseSpintax(text);}function generateAntiSpamFootprint(){var chars=['\\u200B','\\u200C','\\u200D','\\uFEFF'];var footprint='<div style=\"display:none; font-size:0px; color:transparent; opacity:0;\">';for(var i=0;i<15;i++)footprint+=chars[Math.floor(Math.random()*chars.length)];return footprint+'</div>';}function doGet(e){return ContentService.createTextOutput('GAS Active!');}";
+  // Script GAS versi bersih tanpa karakter aneh yang memicu syntax error
+  const cleanGasCode = `var MAX_TOTAL_BLAST = 1000;
+var BATCH_CHUNK_LIMIT = 28;
 
-  const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Google Apps Script Code</title><style>body{background-color:#1e1e1e;color:#d4d4d4;font-family:monospace;padding:15px;}pre{background:#2d2d2d;padding:12px;border-radius:5px;overflow-x:auto;white-space:pre-wrap;word-wrap:break-word;font-size:13px;}button{background:#0e639c;color:white;border:none;padding:14px 20px;font-size:16px;border-radius:6px;cursor:pointer;font-weight:bold;width:100%;margin-bottom:10px;}button:active{background:#1177bb;}.success{background:#28a745 !important;}p{font-size:14px;color:#ccc;}</style></head><body><h3>Google Apps Script (GAS) Code</h3><button id="copyBtn" onclick="selectAndCopy()">📋 SELECT & COPY KODE</button><p>Klik tombol di atas untuk memilih seluruh teks, lalu tekan opsi <b>Salin (Copy)</b> yang muncul di layar HP kamu.</p><hr><pre><code id="codeBlock">${rawGasScript}</code></pre><script>function selectAndCopy(){const codeEl=document.getElementById('codeBlock');const range=document.createRange();range.selectNodeContents(codeEl);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);try{const successful=document.execCommand('copy');const btn=document.getElementById('copyBtn');if(successful){btn.innerText='✅ BERHASIL DISALIN! SILAHKAN PASTE';btn.classList.add('success');}else{btn.innerText='⚠️ TEKS TERPILIH, SILAHKAN Klik "SALIN"';}}catch(err){alert('Teks sudah diblok/dipilih. Silakan klik menu salin di HP.');}}</script></body></html>`;
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return responseJSON({ status: 'error', message: 'Payload kosong' });
+    }
+    var data = JSON.parse(e.postData.contents);
+    var recipients = data.recipients || [];
+    
+    if (recipients.length > MAX_TOTAL_BLAST) {
+      sendTelegramMessage(data.botToken, data.chatId, '❌ Gagal: Maksimal total email adalah ' + MAX_TOTAL_BLAST + '.');
+      return responseJSON({ status: 'error', message: 'Too many recipients' });
+    }
+    
+    PropertiesService.getScriptProperties().setProperty('QUEUED_PAYLOAD', e.postData.contents);
+    createQueueTrigger(1);
+    return responseJSON({ status: 'success', message: 'Antrean berhasil dibuat!' });
+  } catch (errMain) {
+    return responseJSON({ status: 'error', message: 'System Error: ' + errMain.message });
+  }
+}
 
-  const fileBuffer = Buffer.from(htmlContent, 'utf-8');
-  await ctx.replyWithDocument({ source: fileBuffer, filename: 'script-gas.html' }, {
-    caption: '📄 <b>FILE HTML SCRIPT GAS (ONE-LINE SAFE)</b>\n\nBuka file HTML ini, lalu klik tombol **SELECT & COPY KODE**!',
+function processEmailQueue() {
+  deleteOldTriggers('processEmailQueue');
+  var props = PropertiesService.getScriptProperties();
+  var payloadRaw = props.getProperty('QUEUED_PAYLOAD');
+  if (!payloadRaw) return;
+  
+  var data = JSON.parse(payloadRaw);
+  var recipients = data.recipients || [];
+  var remainingQuota = MailApp.getRemainingDailyQuota();
+  
+  if (remainingQuota <= 0) {
+    sendTelegramMessage(data.botToken, data.chatId, '⚠️ Kuota Gmail Hari ini Habis!');
+    createQueueTrigger(24 * 60);
+    return;
+  }
+  
+  var maxCanSendNow = Math.min(BATCH_CHUNK_LIMIT, remainingQuota);
+  var toSendNowCount = Math.min(recipients.length, maxCanSendNow);
+  var recipientsNow = recipients.slice(0, toSendNowCount);
+  var recipientsRemaining = recipients.slice(toSendNowCount);
+  var sentCount = 0;
+  var attachments = [];
+  
+  if (data.pdfUrl && data.pdfName) {
+    try {
+      var response = UrlFetchApp.fetch(data.pdfUrl, { muteHttpExceptions: true });
+      if (response.getResponseCode() === 200) {
+        attachments.push(response.getBlob().setName(data.pdfName));
+      }
+    } catch (e) {}
+  }
+  
+  for (var j = 0; j < recipientsNow.length; j++) {
+    var emailTarget = recipientsNow[j].trim();
+    if (!emailTarget) continue;
+    try {
+      var finalSubject = parseSpintax(data.subject);
+      var finalBody = parseSpintax(data.body);
+      var htmlContent = finalBody.split('\\n').join('<br>');
+      
+      MailApp.sendEmail({
+        to: emailTarget,
+        subject: finalSubject,
+        htmlBody: htmlContent,
+        name: data.senderName,
+        attachments: attachments
+      });
+      sentCount++;
+      
+      if (j < recipientsNow.length - 1) {
+        Utilities.sleep(Math.floor(Math.random() * (15000 - 10000 + 1) + 10000));
+      }
+    } catch (err) {}
+  }
+  
+  if (recipientsRemaining.length > 0) {
+    data.recipients = recipientsRemaining;
+    props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
+    if (MailApp.getRemainingDailyQuota() > 0) {
+      sendTelegramMessage(data.botToken, data.chatId, '⏳ Batch Terkirim: ' + sentCount + ' email. Melanjutkan...');
+      createQueueTrigger(1);
+    }
+  } else {
+    props.deleteProperty('QUEUED_PAYLOAD');
+    sendTelegramMessage(data.botToken, data.chatId, '✅ SEMUA ANTREAN SELESAI!');
+  }
+}
+
+function createQueueTrigger(minutes) {
+  ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes * 60 * 1000).create();
+}
+
+function deleteOldTriggers(functionName) {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === functionName) {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+}
+
+function sendTelegramMessage(token, chatid, text) {
+  UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ chat_id: chatid, text: text, parse_mode: 'HTML' }),
+    muteHttpExceptions: true
+  });
+}
+
+function responseJSON(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function parseSpintax(text) {
+  if (!text) return '';
+  var matches = text.match(/\\{([^}^{]*)\\}/g);
+  if (!matches) return text;
+  for (var i = 0; i < matches.length; i++) {
+    var options = matches.slice(1, -1).split('|');
+    text = text.replace(matches[i], options[Math.floor(Math.random() * options.length)]);
+  }
+  return parseSpintax(text);
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput('GAS Active!');
+}`;
+
+  const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
+  await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
+    caption: '📂 <b>FILE SCRIPT GAS BERSIH (Code.gs)</b>\n\nDownload file ini, lalu upload/impor langsung ke Google Apps Script kamu, atau buka dengan aplikasi teks editor lalu copy isinya.',
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]])
   });
@@ -117,9 +246,9 @@ bot.action('tutorial_gas', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
   await clearBotMsg(ctx, session);
-  const sent = await ctx.reply('📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n1️⃣ Buka script.google.com lalu buat New Project.\n2️⃣ Ambil file HTML dari bot.\n3️⃣ Buka file HTML di browser HP, klik SELECT & COPY KODE, lalu paste ke editor GAS.\n4️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n5️⃣ Salin URL Web app ke bot via ⚙️ SETTING WEBHOOK GAS.', {
+  const sent = await ctx.reply('📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n1️⃣ Buka script.google.com lalu buat New Project.\n2️⃣ Download file <b>Code.gs</b> dari bot ini.\n3️⃣ Masukkan file tersebut ke editor GAS (hapus kode bawaan).\n4️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n5️⃣ Salin URL Web app ke bot via ⚙️ SETTING WEBHOOK GAS.', {
     parse_mode: 'HTML', disable_web_page_preview: true,
-    ...Markup.inlineKeyboard([[Markup.button.callback('📜 AMBIL SCRIPT GAS', 'get_gas_script')], [Markup.button.callback('🔙 KEMBALI', 'back_to_menu')]])
+    ...Markup.inlineKeyboard([[Markup.button.callback('📂 DOWNLOAD FILE SCRIPT', 'get_gas_file')], [Markup.button.callback('🔙 KEMBALI', 'back_to_menu')]])
   });
   session.lastMsgId = sent.message_id;
 });
