@@ -223,7 +223,7 @@ function processEmailQueue() {
   
   for (var j = 0; j < recipientsNow.length; j++) {
     if (PropertiesService.getScriptProperties().getProperty('STOP_FLAG') === 'true') {
-      sendTelegramMessage(data.botToken, data.chatId, '🛑 <b>BLAST DIHENTIKAN PAKSA</b>\nTotal terkirim sebelum berhenti: ' + sentCount + ' email.');
+      sendTelegramMessage(data.botToken, data.chatId, '🛑 <b>BLAST DIHENTIKAN PAKSA</b>\\nTotal terkirim sebelum berhenti: ' + sentCount + ' email.');
       return;
     }
 
