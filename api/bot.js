@@ -294,7 +294,7 @@ function responseJSON(obj) {
 
 function parseSpintax(text) {
   if (!text) return '';
-  return text.replace(/\\\\{([^{}]+)\\\\}/g, function(match, group) {
+  return text.replace(/\\{([^{}]+)\\}/g, function(match, group) {
     var options = group.split('|');
     return options[Math.floor(Math.random() * options.length)];
   });
@@ -306,7 +306,7 @@ function doGet(e) {
 
   const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
-    caption: '📂 <b>FILE SCRIPT GAS DENGAN STOP FLAG TERBARU (Code.gs)</b>\n\nDownload file ini atau gunakan fitur Download Script di bot untuk memperbarui script Google Apps Script kamu.',
+    caption: '📂 <b>FILE SCRIPT GAS TERBARU (Code.gs)</b>\n\nDownload file ini atau gunakan fitur Download Script di bot untuk memperbarui script Google Apps Script kamu.',
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali ke Menu', 'back_to_menu')]])
   });
