@@ -141,12 +141,12 @@ bot.action('start_blast', async (ctx) => {
 bot.action('get_gas_script', async (ctx) => {
   const session = getSession(ctx.from.id);
   try {
-    await ctx.answerCbQuery('Mengirim file script GAS...');
+    await ctx.answerCbQuery('Mengirim file HTML script...');
   } catch (e) {}
 
   await clearBotMsg(ctx, session);
 
-  const gasCodeText = 
+  const scriptCode = 
 `var MAX_TOTAL_BLAST = 1000;
 var BATCH_CHUNK_LIMIT = 28;
 
@@ -257,22 +257,38 @@ function generateAntiSpamFootprint() {
 
 function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
 
-  // Kirim file script sebagai dokumen (.js / .html)
-  const fileBuffer = Buffer.from(gasCodeText, 'utf-8');
+  // Bungkus dalam format file HTML lengkap
+  const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Google Apps Script Code</title>
+<style>
+  body { background-color: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 20px; }
+  pre { white-space: pre-wrap; word-wrap: break-word; }
+</style>
+</head>
+<body>
+<h3>Script Google Apps Script (GAS)</h3>
+<p>Salin seluruh teks kode JavaScript di bawah ini ke editor project Google Apps Script kamu:</p>
+<hr>
+<pre><code>${scriptCode}</code></pre>
+</body>
+</html>`;
+
+  const fileBuffer = Buffer.from(htmlContent, 'utf-8');
   
   await ctx.replyWithDocument(
-    { source: fileBuffer, filename: 'Code.gs' },
+    { source: fileBuffer, filename: 'script-gas.html' },
     {
-      caption: '📜 <b>SCRIPT GOOGLE APPS SCRIPT (GAS)</b>\n\nDownload file di atas, lalu salin isinya ke editor Google Apps Script kamu.',
+      caption: '📄 <b>FILE HTML SCRIPT GAS</b>\n\nBuka file HTML ini di browser atau text editor untuk menyalin kodenya dengan mudah!',
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
       ])
     }
   );
-  
-  // Simpan reference message ID terakhir jika diperlukan untuk hapus pesan bersih
-  session.lastMsgId = null; // karena dokumen dikirim terpisah, biarkan aman
+  session.lastMsgId = null;
 });
 
 bot.action('tutorial_gas', async (ctx) => {
@@ -283,8 +299,8 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
-    `2️⃣ Klik tombol <b>📜 AMBIL SCRIPT GAS</b> untuk mendownload file <code>Code.gs</code>.\n` +
-    `3️⃣ Buka filenya, salin semua kodenya, dan tempel ke editor Google Apps Script.\n` +
+    `2️⃣ Klik tombol <b>📜 AMBIL SCRIPT GAS</b> untuk mendownload file <code>script-gas.html</code>.\n` +
+    `3️⃣ Buka file HTML tersebut, salin kodenya, lalu tempel ke editor Google Apps Script.\n` +
     `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih <b>Web app</b>.\n` +
     `5️⃣ Atur <b>Execute as</b>: <i>Me</i> & <b>Who has access</b>: <i>Anyone</i>.\n` +
     `6️⃣ Salin URL Web App dan masukkan ke bot via <b>⚙️ SETTING WEBHOOK GAS</b>.`,
