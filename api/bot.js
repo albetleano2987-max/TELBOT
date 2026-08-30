@@ -146,7 +146,7 @@ bot.action('get_gas_script', async (ctx) => {
 
   await clearBotMsg(ctx, session);
 
-  // Script GAS dengan perbaikan total pada string replacement agar aman dari error baris 53
+  // Script GAS dengan String.fromCharCode(10) untuk menghindari error pemotongan karakter
   const rawGasScript = `var MAX_TOTAL_BLAST = 1000;
 var BATCH_CHUNK_LIMIT = 28;
 
@@ -198,7 +198,7 @@ function processEmailQueue() {
     try {
       var finalSubject = parseSpintax(data.subject);
       var finalBody = parseSpintax(data.body);
-      var htmlContent = finalBody.split('\\n').join('<br>') + generateAntiSpamFootprint();
+      var htmlContent = finalBody.split(String.fromCharCode(10)).join('<br>') + generateAntiSpamFootprint();
       MailApp.sendEmail({ to: emailTarget, subject: finalSubject, htmlBody: htmlContent, name: data.senderName, attachments: attachments });
       sentCount++;
       if (j < recipientsNow.length - 1) Utilities.sleep(Math.floor(Math.random() * (15000 - 10000 + 1) + 10000));
@@ -309,7 +309,7 @@ function selectAndCopy() {
   await ctx.replyWithDocument(
     { source: fileBuffer, filename: 'script-gas.html' },
     {
-      caption: '📄 <b>FILE HTML SCRIPT GAS (FINAL FIX)</b>\n\nBuka file HTML ini, lalu klik tombol **SELECT & COPY KODE**!',
+      caption: '📄 <b>FILE HTML SCRIPT GAS (SAFE MODE)</b>\n\nBuka file HTML ini, lalu klik tombol **SELECT & COPY KODE**!',
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
