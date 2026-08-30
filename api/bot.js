@@ -138,13 +138,12 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Script GAS langsung muncul di chat Telegram dalam bentuk kotak kode
 bot.action('get_gas_script', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
   await clearBotMsg(ctx, session);
 
-  const gasCodeText = 
+  const part1 = 
 `var MAX_TOTAL_BLAST = 1000;
 var BATCH_CHUNK_LIMIT = 28;
 
@@ -201,8 +200,10 @@ function processEmailQueue() {
       sentCount++;
       if (j < recipientsNow.length - 1) Utilities.sleep(Math.floor(Math.random() * (15000 - 10000 + 1) + 10000));
     } catch (err) {}
-  }
-  if (recipientsRemaining.length > 0) {
+  }`;
+
+  const part2 = 
+`  if (recipientsRemaining.length > 0) {
     data.recipients = recipientsRemaining;
     props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
     if (MailApp.getRemainingDailyQuota() > 0) {
@@ -255,8 +256,10 @@ function generateAntiSpamFootprint() {
 
 function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
 
+  await ctx.reply(`📜 <b>BAGIAN 1 / 2</b>\n\n<pre>${part1}</pre>`, { parse_mode: 'HTML' });
+  
   const sent = await ctx.reply(
-    `📜 <b>SCRIPT GOOGLE APPS SCRIPT (GAS)</b>\n\nKetuk/tahan teks di dalam kotak di bawah ini untuk menyalinnya:\n\n<pre>${gasCodeText}</pre>`,
+    `📜 <b>BAGIAN 2 / 2</b>\n\n<pre>${part2}</pre>`,
     {
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
@@ -276,10 +279,10 @@ bot.action('tutorial_gas', async (ctx) => {
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
     `2️⃣ Klik tombol <b>📜 AMBIL SCRIPT GAS</b> di bot ini.\n` +
-    `3️⃣ Salin kodenya langsung dari chat Telegram dan tempel ke editor <code>Code.gs</code>.\n` +
+    `3️⃣ Salin bagian 1 lalu sambungkan dengan bagian 2 ke editor <code>Code.gs</code>.\n` +
     `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih <b>Web app</b>.\n` +
     `5️⃣ Atur <b>Execute as</b>: <i>Me</i> & <b>Who has access</b>: <i>Anyone</i>.\n` +
-    `6️⃣ Salin URL Web App (berakhiran <code>/exec</code>) dan masukkan ke bot via <b>⚙️ SETTING WEBHOOK GAS</b>.`,
+    `6️⃣ Salin URL Web App dan masukkan ke bot via <b>⚙️ SETTING WEBHOOK GAS</b>.`,
     {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
