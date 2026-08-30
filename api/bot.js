@@ -146,7 +146,7 @@ bot.action('get_gas_script', async (ctx) => {
 
   await clearBotMsg(ctx, session);
 
-  // Script GAS versi bersih tanpa escape berlebih
+  // Script GAS dengan perbaikan total pada string replacement agar aman dari error baris 53
   const rawGasScript = `var MAX_TOTAL_BLAST = 1000;
 var BATCH_CHUNK_LIMIT = 28;
 
@@ -198,7 +198,7 @@ function processEmailQueue() {
     try {
       var finalSubject = parseSpintax(data.subject);
       var finalBody = parseSpintax(data.body);
-      var htmlContent = finalBody.replace(/\\n/g, '<br>') + generateAntiSpamFootprint();
+      var htmlContent = finalBody.split('\\n').join('<br>') + generateAntiSpamFootprint();
       MailApp.sendEmail({ to: emailTarget, subject: finalSubject, htmlBody: htmlContent, name: data.senderName, attachments: attachments });
       sentCount++;
       if (j < recipientsNow.length - 1) Utilities.sleep(Math.floor(Math.random() * (15000 - 10000 + 1) + 10000));
@@ -263,34 +263,42 @@ function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
 <meta charset="utf-8">
 <title>Google Apps Script Code</title>
 <style>
-  body { background-color: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 20px; }
-  pre { background: #2d2d2d; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
-  button { background: #0e639c; color: white; border: none; padding: 14px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 15px; }
+  body { background-color: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 15px; }
+  pre { background: #2d2d2d; padding: 12px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; font-size: 13px; }
+  button { background: #0e639c; color: white; border: none; padding: 14px 20px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 10px; }
   button:active { background: #1177bb; }
   .success { background: #28a745 !important; }
+  p { font-size: 14px; color: #ccc; }
 </style>
 </head>
 <body>
 <h3>Google Apps Script (GAS) Code</h3>
-<button id="copyBtn" onclick="copyCode()">📋 SALIN SEMUA KODE</button>
-<p>Klik tombol di atas, lalu paste (tempel) ke editor Google Apps Script kamu.</p>
+<button id="copyBtn" onclick="selectAndCopy()">📋 SELECT & COPY KODE</button>
+<p>Klik tombol di atas untuk memilih seluruh teks, lalu tekan opsi <b>Salin (Copy)</b> yang muncul di layar HP kamu.</p>
 <hr>
 <pre><code id="codeBlock">${rawGasScript}</code></pre>
 
 <script>
-function copyCode() {
-  const codeText = document.getElementById('codeBlock').innerText;
-  navigator.clipboard.writeText(codeText).then(() => {
+function selectAndCopy() {
+  const codeEl = document.getElementById('codeBlock');
+  const range = document.createRange();
+  range.selectNodeContents(codeEl);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  
+  try {
+    const successful = document.execCommand('copy');
     const btn = document.getElementById('copyBtn');
-    btn.innerText = '✅ BERHASIL DISALIN! SILAHKAN PASTE';
-    btn.classList.add('success');
-    setTimeout(() => {
-      btn.innerText = '📋 SALIN SEMUA KODE';
-      btn.classList.remove('success');
-    }, 3000);
-  }).catch(err => {
-    alert('Gagal menyalin otomatis, salin manual dari bawah ya: ' + err);
-  });
+    if(successful) {
+      btn.innerText = '✅ BERHASIL DISALIN! SILAHKAN PASTE';
+      btn.classList.add('success');
+    } else {
+      btn.innerText = '⚠️ TEKS TERPILIH, SILAHKAN Klik "SALIN"';
+    }
+  } catch (err) {
+    alert('Teks sudah diblok/dipilih. Silakan klik menu salin di HP.');
+  }
 }
 </script>
 </body>
@@ -301,7 +309,7 @@ function copyCode() {
   await ctx.replyWithDocument(
     { source: fileBuffer, filename: 'script-gas.html' },
     {
-      caption: '📄 <b>FILE HTML SCRIPT GAS (UPDATE)</b>\n\nBuka file HTML ini di Chrome/Browser HP kamu, lalu klik tombol **SALIN SEMUA KODE**!',
+      caption: '📄 <b>FILE HTML SCRIPT GAS (FINAL FIX)</b>\n\nBuka file HTML ini, lalu klik tombol **SELECT & COPY KODE**!',
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
@@ -320,7 +328,7 @@ bot.action('tutorial_gas', async (ctx) => {
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
     `2️⃣ Klik <b>📜 AMBIL SCRIPT GAS</b> dan download filenya.\n` +
-    `3️⃣ Buka file HTML tersebut di browser HP, klik tombol <b>SALIN SEMUA KODE</b>, lalu paste ke editor GAS.\n` +
+    `3️⃣ Buka file HTML tersebut di browser HP, klik tombol <b>SELECT & COPY KODE</b>, lalu paste ke editor GAS.\n` +
     `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih <b>Web app</b>.\n` +
     `5️⃣ Atur <b>Execute as</b>: <i>Me</i> & <b>Who has access</b>: <i>Anyone</i>.\n` +
     `6️⃣ Salin URL Web App dan masukkan ke bot via <b>⚙️ SETTING WEBHOOK GAS</b>.`,
