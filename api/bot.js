@@ -4,7 +4,7 @@ const csv = require('csv-parser');
 const xlsx = require('xlsx');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-// Link GAS terbaru kamu sudah dipasang di sini
+// Link GAS terbaru kamu
 const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwT-2uI2mFR-6EyHDN9kreWMtLo3CBpHwCqQGkqiG1VqohoMQXN1QVHmhqGXlXL_DM/exec';
 
 const bot = new Telegraf(BOT_TOKEN || '');
@@ -69,13 +69,13 @@ const checkAccessMiddleware = async (ctx, next) => {
     }
   } catch (e) {}
 
-  // Jika belum di-ACC, tampilkan tombol Minta Akses
+  // Jika belum di-ACC, tampilkan tombol Minta Akses (callback dipendekkan agar aman dari error 64 byte)
   await clearBotMsg(ctx, session);
   const sent = await ctx.reply(
     '⛔ <b>AKSES DITOLAK</b>\n\nBot ini bersifat privat dan hanya bisa digunakan oleh user yang sudah di-ACC oleh Admin. Silakan klik tombol di bawah untuk meminta akses.',
     {
       parse_mode: 'HTML',
-      ...Markup.inlineKeyboard([[Markup.button.callback('📩 Minta Akses ke Admin', `request_access_${userId}`)]])
+      ...Markup.inlineKeyboard([[Markup.button.callback('📩 Minta Akses ke Admin', `req_${userId}`)]])
     }
   );
   session.lastMsgId = sent.message_id;
@@ -129,14 +129,14 @@ bot.start(async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Request Akses oleh User
-bot.action(/^request_access_(.+)$/, async (ctx) => {
+// Request Akses oleh User (Menggunakan prefix 'req_')
+bot.action(/^req_(.+)$/, async (ctx) => {
   const userId = ctx.match[1];
   const user = ctx.from;
-  ctx.answerCbQuery('Permintaan akses dikirim ke Admin!');
+  await ctx.answerCbQuery('Permintaan akses dikirim ke Admin!');
 
   try {
-    await ctx.telegram.sendMessage(
+    await bot.telegram.sendMessage(
       "7619665121",
       `🔔 <b>PERMINTAAN AKSES BARU</b>\n\n👤 Nama: ${user.first_name || '-'} ${user.last_name || ''}\n🔗 Username: @${user.username || 'Tidak ada'}\n🆔 ID: <code>${userId}</code>`,
       {
@@ -144,7 +144,9 @@ bot.action(/^request_access_(.+)$/, async (ctx) => {
         ...Markup.inlineKeyboard([[Markup.button.callback('✅ ACC SEKARANG', `acc_user_${userId}`)]])
       }
     );
-  } catch (e) {}
+  } catch (err) {
+    console.error("Gagal kirim pesan ke admin:", err.message);
+  }
 
   await ctx.editMessageText('⏳ Permintaan akses sudah dikirim ke Admin. Mohon tunggu persetujuan.', { parse_mode: 'HTML' });
 });
