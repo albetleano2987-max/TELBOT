@@ -220,7 +220,7 @@ function processEmailQueue() {
     try {
       var finalSubject = parseSpintax(data.subject);
       var finalBody = parseSpintax(data.body);
-      var htmlContent = finalBody.split('\\\\n').join('<br>');
+      var htmlContent = finalBody.replace(/\\r\\n|\\n|\\r/g, '<br>');
       
       MailApp.sendEmail({
         to: emailTarget,
@@ -290,7 +290,7 @@ function doGet(e) {
 
   const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
-    caption: '📂 <b>FILE SCRIPT GAS DENGAN SPINTAX DIPERBAIKI (Code.gs)</b>\n\nDownload file ini, update script di Google Apps Script kamu, dan **Deploy ulang (New Deployment)**.',
+    caption: '📂 <b>FILE SCRIPT GAS DENGAN FIX ENTER/PARAGRAF (Code.gs)</b>\n\nDownload file ini, update script di Google Apps Script kamu, dan **Deploy ulang (New Deployment)**.',
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali ke Menu', 'back_to_menu')]])
   });
@@ -435,7 +435,8 @@ bot.action('execute_blast', async (ctx) => {
   await clearBotMsg(ctx, session);
   try {
     const payload = { chatId: ctx.from.id, botToken: BOT_TOKEN, recipients: session.recipients, senderName: session.senderName, subject: session.subject, body: session.body, pdfUrl: session.pdf ? session.pdf.url : null, pdfName: session.pdf ? session.pdf.name : null };
-    await axios.post(session.gasUrl, payload, { timeout: 0 });
+    // Menggunakan timeout 15 detik agar aman dari batas Vercel tanpa memutus proses asinkron GAS
+    await axios.post(session.gasUrl, payload, { timeout: 15000 });
     const sent = await ctx.reply('✅ <b>Antrean Diterima!</b>\n\nGAS akan mengirimkan email secara bertahap.', { parse_mode: 'HTML', ...mainMenu });
     session.lastMsgId = sent.message_id;
   } catch (err) {
