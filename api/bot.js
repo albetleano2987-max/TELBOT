@@ -26,10 +26,15 @@ const clearUserMsg = async (ctx) => {
   }
 };
 
-// Fungsi Middleware Pengecekan Akses (Whitelist via GAS)
+// Middleware Pengecekan Akses (Whitelist via GAS) dengan Bypass Admin Mutlak
 const checkAccessMiddleware = async (ctx, next) => {
   const userId = ctx.from ? ctx.from.id : null;
   if (!userId) return;
+
+  // BYPASS MUTLAK ADMIN UTAMA
+  if (String(userId) === "7619665121") {
+    return next();
+  }
 
   // Bypass untuk command callback ACC dari admin
   if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('acc_user_')) {
@@ -38,24 +43,18 @@ const checkAccessMiddleware = async (ctx, next) => {
 
   const session = getSession(userId);
 
-  // Jika GAS belum diset, arahkan setting (khusus admin awal)
   if (!session.gasUrl) {
-    // Cek apakah ini admin utama
-    if (String(userId) === "7619665121") {
-      return next();
-    }
-    await ctx.reply('⚠️ Bot sedang dalam pemeliharaan konfigurasi. Silakan hubungi Owner.');
+    await ctx.reply('⚠️ Webhook GAS belum di-set oleh Admin. Silakan set dulu via menu.');
     return;
   }
 
   try {
     const res = await axios.post(session.gasUrl, { action: 'check_access', telegramId: userId }, { timeout: 10000 });
     if (res.data && res.data.allowed) {
-      return next(); // Lanjut jika di-acc
+      return next(); 
     }
   } catch (e) {}
 
-  // Jika belum di-acc
   await clearBotMsg(ctx, session);
   const sent = await ctx.reply(
     '⛔ <b>AKSES DITOLAK</b>\n\nKamu belum memiliki izin untuk menggunakan bot Mailblast ini. Silakan klik tombol di bawah untuk meminta akses ke Admin.',
@@ -104,7 +103,7 @@ const mainMenu = Markup.inlineKeyboard([
   [Markup.button.url('👤 Owner (@andiigndr29)', 'https://instagram.com/andiigndr29')]
 ]);
 
-// Terapkan pengecekan akses ke semua handler pesan/callback
+// Terapkan middleware keamanan
 bot.use(checkAccessMiddleware);
 
 bot.start(async (ctx) => {
@@ -115,13 +114,12 @@ bot.start(async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Fitur Tombol Minta Akses oleh User
+// Request Akses oleh User
 bot.action(/^request_access_(.+)$/, async (ctx) => {
   const userId = ctx.match[1];
   const user = ctx.from;
   ctx.answerCbQuery('Permintaan akses dikirim ke Admin!');
 
-  // Kirim notifikasi ke Admin (ID: 7619665121)
   try {
     await ctx.telegram.sendMessage(
       "7619665121",
@@ -136,7 +134,7 @@ bot.action(/^request_access_(.+)$/, async (ctx) => {
   await ctx.editMessageText('⏳ Permintaan akses sudah dikirim ke Admin. Mohon tunggu persetujuan.', { parse_mode: 'HTML' });
 });
 
-// Admin Klik Tombol ACC
+// Admin ACC User
 bot.action(/^acc_user_(.+)$/, async (ctx) => {
   const targetId = ctx.match[1];
   const session = getSession(ctx.from.id);
@@ -150,7 +148,6 @@ bot.action(/^acc_user_(.+)$/, async (ctx) => {
     const res = await axios.post(session.gasUrl, { action: 'approve_user', telegramId: targetId }, { timeout: 10000 });
     if (res.data && res.data.status === 'success') {
       await ctx.editMessageText(`✅ <b>SUKSES!</b> User dengan ID <code>${targetId}</code> berhasil di-ACC dan kini bisa menggunakan bot.`, { parse_mode: 'HTML' });
-      // Kirim pesan notifikasi ke user bersangkutan
       try {
         await ctx.telegram.sendMessage(targetId, '🎉 <b>Hore! Akses kamu telah disetujui oleh Admin.</b>\n\nSilakan ketik /start untuk mulai menggunakan bot.', { parse_mode: 'HTML' });
       } catch (e) {}
@@ -236,12 +233,10 @@ bot.action('get_gas_file', async (ctx) => {
   try { await ctx.answerCbQuery('Mengirim file script GAS...'); } catch (e) {}
   await clearBotMsg(ctx, session);
 
-  // File Code.gs sudah digabungkan sebelumnya
-  const cleanGasCode = `// (Gunakan kode Code.gs lengkap yang sudah digabungkan di langkah sebelumnya)`;
-  const fileBuffer = Buffer.from("Silakan gunakan file Code.gs lengkap yang sudah diberikan di instruksi sebelumnya.", 'utf-8');
-  
+  const cleanGasCode = `// Gunakan script Code.gs lengkap yang sudah disediakan sebelumnya`;
+  const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
-    caption: '📂 <b>FILE SCRIPT GAS DENGAN WHITELIST</b>\n\nPastikan kamu sudah memperbarui kode GAS dengan skrip yang mencakup fungsi whitelist dan ID 7619665121.',
+    caption: '📂 <b>FILE SCRIPT GAS DENGAN WHITELIST</b>\n\nPastikan Google Apps Script kamu sudah menggunakan kode terbaru.',
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali ke Menu', 'back_to_menu')]])
   });
@@ -255,7 +250,7 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     '📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n' +
     '1️⃣ Buka <u>script.google.com</u> lalu buat New Project.\n' +
-    '2️⃣ Masukkan kode <b>Code.gs</b> terbaru yang sudah ada fungsi Whitelist.\n' +
+    '2️⃣ Masukkan kode <b>Code.gs</b> terbaru.\n' +
     '3️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n' +
     '4️⃣ Salin URL Web app ke bot via ⚙️ Setting Webhook.', 
     {
