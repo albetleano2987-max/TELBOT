@@ -4,7 +4,7 @@ const csv = require('csv-parser');
 const xlsx = require('xlsx');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzzoE_G4KZlSJNpf-V-NcqRFw8VcmziBZvesfA-ZTtIhuPMBYKk4qfWXq4KeXAqu-k8/exec';
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwSTMAlj5SC51IuBwQU2UQ0tL6w4zlAYz9UYkxSQ13xiOFXHlNGowFKwq8vNbhWMh5S/exec';[cite: 2]
 
 const bot = new Telegraf(BOT_TOKEN || '');
 const userSessions = {};
@@ -19,12 +19,12 @@ const getSession = (userId) => {
       subject: '', 
       body: '', 
       pdf: null, 
-      gasUrl: DEFAULT_GAS_URL, 
+      gasUrl: DEFAULT_GAS_URL,[cite: 2]
       lastMsgId: null 
     };
   } else {
     if (!userSessions[userId].gasUrl) {
-      userSessions[userId].gasUrl = DEFAULT_GAS_URL;
+      userSessions[userId].gasUrl = DEFAULT_GAS_URL;[cite: 2]
     }
   }
   return userSessions[userId];
@@ -156,24 +156,26 @@ bot.action(/^req_(.+)$/, async (ctx) => {
 bot.action(/^acc_user_(.+)$/, async (ctx) => {
   const targetId = ctx.match[1];
   const session = getSession(ctx.from.id);
-  ctx.answerCbQuery('Memproses ACC...');
+  await ctx.answerCbQuery('Memproses ACC ke Spreadsheet...').catch(() => {});
 
-  if (!session.gasUrl) {
-    return ctx.reply('⚠️ Webhook GAS belum diset.');
-  }
+  const targetGasUrl = session.gasUrl || DEFAULT_GAS_URL;[cite: 2]
 
   try {
-    const res = await axios.post(session.gasUrl, { action: 'approve_user', telegramId: targetId }, { timeout: 10000 });
+    const res = await axios.post(targetGasUrl, { 
+      action: 'approve_user', 
+      telegramId: targetId 
+    }, { timeout: 15000 });
+    
     if (res.data && res.data.status === 'success') {
-      await ctx.editMessageText(`✅ <b>SUKSES!</b> User dengan ID <code>${targetId}</code> berhasil di-ACC dan kini bisa menggunakan bot.`, { parse_mode: 'HTML' });
+      await ctx.editMessageText(`✅ <b>SUKSES!</b> User dengan ID <code>${targetId}</code> berhasil di-ACC dan masuk ke Spreadsheet.`, { parse_mode: 'HTML' });
       try {
         await ctx.telegram.sendMessage(targetId, '🎉 <b>Hore! Akses kamu telah disetujui oleh Admin.</b>\n\nSilakan ketik /start untuk mulai menggunakan bot.', { parse_mode: 'HTML' });
       } catch (e) {}
     } else {
-      await ctx.reply('❌ Gagal meng-ACC user di server GAS.');
+      await ctx.reply(`❌ GAS merespon tapi gagal: ${JSON.stringify(res.data)}`);
     }
   } catch (err) {
-    await ctx.reply(`🚨 Error koneksi ke GAS: ${err.message}`);
+    await ctx.reply(`🚨 Gagal total menghubungi GAS: ${err.message}`);
   }
 });
 
@@ -433,7 +435,7 @@ bot.action('reset_session', async (ctx) => {
     subject: '', 
     body: '', 
     pdf: null, 
-    gasUrl: DEFAULT_GAS_URL, 
+    gasUrl: DEFAULT_GAS_URL,[cite: 2]
     lastMsgId: null 
   };
   const session = getSession(ctx.from.id);
