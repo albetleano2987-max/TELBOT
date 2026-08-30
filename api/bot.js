@@ -1,3 +1,4 @@
+
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const csv = require('csv-parser');
@@ -146,12 +147,6 @@ bot.action('get_gas_script', async (ctx) => {
 
   await clearBotMsg(ctx, session);
 
-  await ctx.reply(
-    `📜 <b>SCRIPT GOOGLE APPS SCRIPT (GAS)</b>\n\n` +
-    `<i>Ketuk/tekan kotak kode di bawah untuk menyalin seluruh kodenya:</i>`,
-    { parse_mode: 'HTML' }
-  );
-
   const gasCodeText = 
 `var MAX_TOTAL_BLAST = 1000;
 var BATCH_CHUNK_LIMIT = 28;
@@ -264,9 +259,11 @@ function generateAntiSpamFootprint() {
 function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
 
   const sent = await ctx.reply(
-    `\`\`\`javascript\n${gasCodeText}\n\`\`\``,
+    `📜 <b>SCRIPT GOOGLE APPS SCRIPT (GAS)</b>\n\n` +
+    `<i>Ketuk kotak kode di bawah untuk menyalin:</i>\n` +
+    `<pre><code>${gasCodeText}</code></pre>`,
     {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
       ])
