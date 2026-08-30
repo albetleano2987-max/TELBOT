@@ -24,7 +24,6 @@ const getSession = (userId) => {
   return userSessions[userId];
 };
 
-// Fungsi pembersih pesan bot lama
 const clearBotMsg = async (ctx, session) => {
   if (session && session.lastMsgId) {
     try {
@@ -34,7 +33,6 @@ const clearBotMsg = async (ctx, session) => {
   }
 };
 
-// Fungsi pembersih pesan user
 const clearUserMsg = async (ctx) => {
   if (ctx.message) {
     try {
@@ -140,20 +138,14 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Handler untuk mengirimkan script GAS otomatis (dipecah agar aman dari limit Telegram)
+// Handler untuk mengirimkan script GAS dalam bentuk file .txt langsung
 bot.action('get_gas_script', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
   await clearBotMsg(ctx, session);
-  
-  await ctx.reply(
-    `📜 <b>SOURCE CODE GOOGLE APPS SCRIPT (GAS)</b> 📜\n\n` +
-    `Silakan salin seluruh kode di bawah ini, lalu tempel (*paste*) ke editor <a href="https://script.google.com/">script.google.com</a> Anda:`,
-    { parse_mode: 'HTML', disable_web_page_preview: true }
-  );
 
-  const part1 = 
-`// ====== KONFIGURASI GAS (BAGIAN 1) ======
+  const gasCodeText = 
+`// ====== KONFIGURASI GAS ======
 var MAX_TOTAL_BLAST = 1000;
 var BATCH_CHUNK_LIMIT = 28;
 
@@ -248,10 +240,8 @@ function processEmailQueue() {
     props.deleteProperty('QUEUED_PAYLOAD');
     sendTelegramMessage(data.botToken, data.chatId, '✅ SEMUA ANTREAN SELESAI!');
   }
-}`;
+}
 
-  const part2 = 
-`// ====== KONFIGURASI GAS (BAGIAN 2) ======
 function createQueueTrigger(minutes) {
   ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes * 60 * 1000).create();
 }
@@ -301,20 +291,26 @@ function doGet(e) {
   return ContentService.createTextOutput("GAS Active!");
 }`;
 
-  // Kirim bagian 1
-  await ctx.reply(`<pre><code>${part1}</code></pre>`, { parse_mode: 'HTML' });
-
-  // Kirim bagian 2 sekaligus tombol kembali
-  const sentFinal = await ctx.reply(
-    `<pre><code>${part2}</code></pre>`,
-    {
-      parse_mode: 'HTML',
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
-      ])
-    }
-  );
-  session.lastMsgId = sentFinal.message_id;
+  try {
+    // Kirim file dokumen teks (.txt) berisi script GAS
+    await ctx.replyWithDocument(
+      { source: Buffer.from(gasCodeText, 'utf-8'), filename: 'Code_GAS.txt' },
+      {
+        caption: `📜 <b>FILE SCRIPT GAS BERHASIL DIKIRIM</b>\n\n` +
+                 `Silakan download file di atas, lalu salin isinya ke editor <a href="https://script.google.com/">script.google.com</a> Anda.`,
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
+        ])
+      }
+    );
+  } catch (err) {
+    const sentFallback = await ctx.reply(
+      '❌ Gagal mengirim file script. Silakan coba lagi.',
+      Markup.inlineKeyboard([[Markup.button.callback('🔙 KEMBALI', 'back_to_menu')]])
+    );
+    session.lastMsgId = sentFallback.message_id;
+  }
 });
 
 bot.action('tutorial_gas', async (ctx) => {
@@ -325,7 +321,7 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
-    `2️⃣ Klik tombol <b>AMBIL SCRIPT GAS</b> di menu utama bot ini, lalu salin kodenya.\n` +
+    `2️⃣ Klik tombol <b>AMBIL SCRIPT GAS</b> di menu utama bot ini untuk mendownload file scriptnya.\n` +
     `3️⃣ Tempel (*paste*) kode tersebut ke editor <code>Code.gs</code> di Google Apps Script.\n` +
     `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih jenis <b>Web app</b>.\n` +
     `5️⃣ Atur <b>Execute as</b>: <i>Me</i> dan <b>Who has access</b>: <i>Anyone</i>.\n` +
