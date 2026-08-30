@@ -4,8 +4,8 @@ const csv = require('csv-parser');
 const xlsx = require('xlsx');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-// Link GAS kamu sudah dipasang otomatis di sini
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwJIgEOIa7mc-yyl8Z29i9WRaR3-0DTgpkR63y8ac0DBZB49dZtFhXQUFAxOcCQQt0/exec';
+// Link GAS terbaru kamu sudah dipasang di sini
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwT-2uI2mFR-6EyHDN9kreWMtLo3CBpHwCqQGkqiG1VqohoMQXN1QVHmhqGXlXL_DM/exec';
 
 const bot = new Telegraf(BOT_TOKEN || '');
 const userSessions = {};
@@ -39,12 +39,12 @@ const clearUserMsg = async (ctx) => {
   }
 };
 
-// Middleware Pengecekan Akses (Whitelist via GAS) dengan Bypass Admin Mutlak
+// Middleware Pengecekan Akses (Whitelist via GAS) dengan Bypass Admin Mutlak (ID: 7619665121)
 const checkAccessMiddleware = async (ctx, next) => {
   const userId = ctx.from ? ctx.from.id : null;
   if (!userId) return;
 
-  // BYPASS MUTLAK UNTUK ADMIN UTAMA (ID kamu: 7619665121)
+  // BYPASS MUTLAK UNTUK ADMIN UTAMA
   if (String(userId) === "7619665121") {
     return next();
   }
@@ -248,7 +248,7 @@ bot.action('get_gas_file', async (ctx) => {
   try { await ctx.answerCbQuery('Mengirim file script GAS...'); } catch (e) {}
   await clearBotMsg(ctx, session);
 
-  const fileBuffer = Buffer.from("Gunakan script Code.gs lengkap yang sudah disediakan sebelumnya.", 'utf-8');
+  const fileBuffer = Buffer.from("Gunakan script Code.gs lengkap yang sudah disediakan.", 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
     caption: '📂 <b>FILE SCRIPT GAS DENGAN WHITELIST</b>',
     parse_mode: 'HTML',
