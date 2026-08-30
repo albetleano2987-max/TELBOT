@@ -55,11 +55,13 @@ const extractEmailsFromFile = async (ctx, docId) => {
   } catch (err) { return null; }
 };
 
+// Tata letak tombol baru yang lebih clean, simetris, dan ada tombol Owner IG
 const mainMenu = Markup.inlineKeyboard([
-  [Markup.button.callback('🚀 BLAST EMAIL MASSAL', 'start_blast')],
-  [Markup.button.callback('📂 DOWNLOAD FILE SCRIPT (.gs)', 'get_gas_file'), Markup.button.callback('📖 CARA PASANG', 'tutorial_gas')],
-  [Markup.button.callback('⚙️ SETTING WEBHOOK GAS', 'set_gas')],
-  [Markup.button.callback('📊 CEK SESI', 'view_session'), Markup.button.callback('🧹 RESET DATA', 'reset_session')]
+  [Markup.button.callback('🚀 MULAI BLAST', 'start_blast')],
+  [Markup.button.callback('📂 Download Script', 'get_gas_file'), Markup.button.callback('📖 Cara Pasang', 'tutorial_gas')],
+  [Markup.button.callback('⚙️ Setting Webhook', 'set_gas')],
+  [Markup.button.callback('📊 Cek Sesi', 'view_session'), Markup.button.callback('🧹 Reset Data', 'reset_session')],
+  [Markup.button.url('👤 Owner (@andiigndr29)', 'https://instagram.com/andiigndr29')]
 ]);
 
 bot.start(async (ctx) => {
@@ -75,7 +77,7 @@ bot.action('set_gas', async (ctx) => {
   session.step = 'AWAIT_GAS_URL';
   ctx.answerCbQuery();
   await clearBotMsg(ctx, session);
-  const sent = await ctx.reply('🔗 <b>Tempelkan Link Web App GAS (/exec):</b>', { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ BATALKAN', 'cancel')]]) });
+  const sent = await ctx.reply('🔗 <b>Tempelkan Link Web App GAS (/exec):</b>', { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Batalkan', 'cancel')]]) });
   session.lastMsgId = sent.message_id;
 });
 
@@ -90,7 +92,7 @@ bot.action('start_blast', async (ctx) => {
   }
   session.step = 'AWAIT_RECIPIENTS_FILE';
   await clearBotMsg(ctx, session);
-  const sent = await ctx.reply('📧 <b>Upload File CSV / EXCEL (.xlsx) Isi Email Target (Max 1000):</b>', { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ BATALKAN', 'cancel')]]) });
+  const sent = await ctx.reply('📧 <b>Upload File CSV / EXCEL (.xlsx) Isi Email Target (Max 1000):</b>', { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Batalkan', 'cancel')]]) });
   session.lastMsgId = sent.message_id;
 });
 
@@ -99,7 +101,6 @@ bot.action('get_gas_file', async (ctx) => {
   try { await ctx.answerCbQuery('Mengirim file script GAS...'); } catch (e) {}
   await clearBotMsg(ctx, session);
 
-  // Script GAS versi bersih tanpa karakter aneh yang memicu syntax error
   const cleanGasCode = `var MAX_TOTAL_BLAST = 1000;
 var BATCH_CHUNK_LIMIT = 28;
 
@@ -235,9 +236,9 @@ function doGet(e) {
 
   const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
-    caption: '📂 <b>FILE SCRIPT GAS BERSIH (Code.gs)</b>\n\nDownload file ini, lalu upload/impor langsung ke Google Apps Script kamu, atau buka dengan aplikasi teks editor lalu copy isinya.',
+    caption: '📂 <b>FILE SCRIPT GAS BERSIH (Code.gs)</b>\n\nDownload file ini, lalu upload/impor langsung ke Google Apps Script kamu.',
     parse_mode: 'HTML',
-    ...Markup.inlineKeyboard([[Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]])
+    ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali ke Menu', 'back_to_menu')]])
   });
   session.lastMsgId = null;
 });
@@ -246,9 +247,9 @@ bot.action('tutorial_gas', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
   await clearBotMsg(ctx, session);
-  const sent = await ctx.reply('📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n1️⃣ Buka script.google.com lalu buat New Project.\n2️⃣ Download file <b>Code.gs</b> dari bot ini.\n3️⃣ Masukkan file tersebut ke editor GAS (hapus kode bawaan).\n4️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n5️⃣ Salin URL Web app ke bot via ⚙️ SETTING WEBHOOK GAS.', {
+  const sent = await ctx.reply('📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n1️⃣ Buka script.google.com lalu buat New Project.\n2️⃣ Download file <b>Code.gs</b> dari bot ini.\n3️⃣ Masukkan file tersebut ke editor GAS.\n4️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n5️⃣ Salin URL Web app ke bot via ⚙️ Setting Webhook.', {
     parse_mode: 'HTML', disable_web_page_preview: true,
-    ...Markup.inlineKeyboard([[Markup.button.callback('📂 DOWNLOAD FILE SCRIPT', 'get_gas_file')], [Markup.button.callback('🔙 KEMBALI', 'back_to_menu')]])
+    ...Markup.inlineKeyboard([[Markup.button.callback('📂 Download Script', 'get_gas_file')], [Markup.button.callback('🔙 Kembali', 'back_to_menu')]])
   });
   session.lastMsgId = sent.message_id;
 });
@@ -269,7 +270,7 @@ bot.on('document', async (ctx) => {
     const fileName = doc.file_name.toLowerCase();
     if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx')) {
       await clearBotMsg(ctx, session);
-      const sent = await ctx.reply('❌ Format salah! Upload file .csv / .xlsx:', Markup.inlineKeyboard([[Markup.button.callback('❌ BATALKAN', 'cancel')]]));
+      const sent = await ctx.reply('❌ Format salah! Upload file .csv / .xlsx:', Markup.inlineKeyboard([[Markup.button.callback('❌ Batalkan', 'cancel')]]));
       session.lastMsgId = sent.message_id;
       return;
     }
@@ -294,7 +295,7 @@ bot.on('document', async (ctx) => {
   } else if (session.step === 'AWAIT_PDF') {
     if (doc.mime_type !== 'application/pdf') {
       await clearBotMsg(ctx, session);
-      const sent = await ctx.reply('❌ File harus PDF! Upload ulang:', Markup.inlineKeyboard([[Markup.button.callback('❌ BATALKAN', 'cancel')]]));
+      const sent = await ctx.reply('❌ File harus PDF! Upload ulang:', Markup.inlineKeyboard([[Markup.button.callback('❌ Batalkan', 'cancel')]]));
       session.lastMsgId = sent.message_id;
       return;
     }
@@ -348,7 +349,7 @@ bot.on('text', async (ctx) => {
       session.body = text;
       session.step = 'AWAIT_PDF';
       await clearBotMsg(ctx, session);
-      const sentPdf = await ctx.reply('📎 Upload File PDF Lampiran atau klik Skip:', Markup.inlineKeyboard([[Markup.button.callback('⏭️ SKIP LAMPIRAN', 'skip_pdf')], [Markup.button.callback('❌ BATALKAN', 'cancel')]]));
+      const sentPdf = await ctx.reply('📎 Upload File PDF Lampiran atau klik Skip:', Markup.inlineKeyboard([[Markup.button.callback('⏭️ Skip Lampiran', 'skip_pdf')], [Markup.button.callback('❌ Batalkan', 'cancel')]]));
       session.lastMsgId = sentPdf.message_id;
       break;
   }
@@ -357,7 +358,7 @@ bot.on('text', async (ctx) => {
 async function showConfirmation(ctx, session) {
   const sent = await ctx.reply(`🔥 <b>KONFIRMASI PENGIRIMAN EMAIL</b> 🔥\n\n🎯 Target: <b>${session.recipients.length} Email</b>\n👤 Pengirim: ${session.senderName}\n📌 Subject: ${session.subject}\n📎 Lampiran: ${session.pdf ? session.pdf.name : '❌'}`, {
     parse_mode: 'HTML',
-    ...Markup.inlineKeyboard([[Markup.button.callback('🚀 KIRIM SEKARANG!', 'execute_blast')], [Markup.button.callback('❌ BATALKAN', 'cancel')]])
+    ...Markup.inlineKeyboard([[Markup.button.callback('🚀 Kirim Sekarang!', 'execute_blast')], [Markup.button.callback('❌ Batalkan', 'cancel')]])
   });
   session.lastMsgId = sent.message_id;
 }
