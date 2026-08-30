@@ -246,10 +246,20 @@ bot.action('tutorial_gas', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
   await clearBotMsg(ctx, session);
-  const sent = await ctx.reply('📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n1️⃣ Buka script.google.com lalu buat New Project.\n2️⃣ Download file <b>Code.gs</b> dari bot ini.\n3️⃣ Masukkan file tersebut ke editor GAS.\n4️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n5️⃣ Salin URL Web app ke bot via ⚙️ Setting Webhook.', {
-    parse_mode: 'HTML', disable_web_page_preview: true,
-    ...Markup.inlineKeyboard([[Markup.button.callback('📂 Download Script', 'get_gas_file')], [Markup.button.callback('🔙 Kembali', 'back_to_menu')]])
-  });
+  const sent = await ctx.reply(
+    '📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n' +
+    '1️⃣ Buka <u>script.google.com</u> lalu buat New Project.\n' +
+    '2️⃣ Download file <b>Code.gs</b> dari bot ini.\n' +
+    '3️⃣ Masukkan/paste file tersebut ke editor GAS.\n' +
+    '4️⃣ Klik ikon <b>Simpan (Floppy Disk)</b> di editor.\n' +
+    '5️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n' +
+    '6️⃣ Saat muncul peringatan Google, klik <b>Advanced / Lanjutan</b> lalu pilih <b>Go to Untitled project (unsafe)</b> dan klik <b>Allow / Izinkan</b> akses Gmail.\n' +
+    '7️⃣ Salin URL Web app ke bot via ⚙️ Setting Webhook.', 
+    {
+      parse_mode: 'HTML', disable_web_page_preview: true,
+      ...Markup.inlineKeyboard([[Markup.button.callback('📂 Download Script', 'get_gas_file')], [Markup.button.callback('🔙 Kembali', 'back_to_menu')]])
+    }
+  );
   session.lastMsgId = sent.message_id;
 });
 
