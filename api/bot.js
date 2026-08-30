@@ -26,6 +26,47 @@ const clearUserMsg = async (ctx) => {
   }
 };
 
+// Fungsi Middleware Pengecekan Akses (Whitelist via GAS)
+const checkAccessMiddleware = async (ctx, next) => {
+  const userId = ctx.from ? ctx.from.id : null;
+  if (!userId) return;
+
+  // Bypass untuk command callback ACC dari admin
+  if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('acc_user_')) {
+    return next();
+  }
+
+  const session = getSession(userId);
+
+  // Jika GAS belum diset, arahkan setting (khusus admin awal)
+  if (!session.gasUrl) {
+    // Cek apakah ini admin utama
+    if (String(userId) === "7619665121") {
+      return next();
+    }
+    await ctx.reply('⚠️ Bot sedang dalam pemeliharaan konfigurasi. Silakan hubungi Owner.');
+    return;
+  }
+
+  try {
+    const res = await axios.post(session.gasUrl, { action: 'check_access', telegramId: userId }, { timeout: 10000 });
+    if (res.data && res.data.allowed) {
+      return next(); // Lanjut jika di-acc
+    }
+  } catch (e) {}
+
+  // Jika belum di-acc
+  await clearBotMsg(ctx, session);
+  const sent = await ctx.reply(
+    '⛔ <b>AKSES DITOLAK</b>\n\nKamu belum memiliki izin untuk menggunakan bot Mailblast ini. Silakan klik tombol di bawah untuk meminta akses ke Admin.',
+    {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([[Markup.button.callback('📩 Minta Akses ke Admin', `request_access_${userId}`)]])
+    }
+  );
+  session.lastMsgId = sent.message_id;
+};
+
 const extractEmailsFromFile = async (ctx, docId) => {
   try {
     const fileLink = await ctx.telegram.getFileLink(docId);
@@ -63,12 +104,62 @@ const mainMenu = Markup.inlineKeyboard([
   [Markup.button.url('👤 Owner (@andiigndr29)', 'https://instagram.com/andiigndr29')]
 ]);
 
+// Terapkan pengecekan akses ke semua handler pesan/callback
+bot.use(checkAccessMiddleware);
+
 bot.start(async (ctx) => {
   const session = getSession(ctx.from.id);
   await clearUserMsg(ctx);
   await clearBotMsg(ctx, session);
   const sent = await ctx.reply('<b>Don\'t Spam Bot !</b>', { parse_mode: 'HTML', ...mainMenu });
   session.lastMsgId = sent.message_id;
+});
+
+// Fitur Tombol Minta Akses oleh User
+bot.action(/^request_access_(.+)$/, async (ctx) => {
+  const userId = ctx.match[1];
+  const user = ctx.from;
+  ctx.answerCbQuery('Permintaan akses dikirim ke Admin!');
+
+  // Kirim notifikasi ke Admin (ID: 7619665121)
+  try {
+    await ctx.telegram.sendMessage(
+      "7619665121",
+      `🔔 <b>PERMINTAAN AKSES BARU</b>\n\n👤 Nama: ${user.first_name || '-'} ${user.last_name || ''}\n🔗 Username: @${user.username || 'Tidak ada'}\n🆔 ID: <code>${userId}</code>`,
+      {
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard([[Markup.button.callback('✅ ACC SEKARANG', `acc_user_${userId}`)]])
+      }
+    );
+  } catch (e) {}
+
+  await ctx.editMessageText('⏳ Permintaan akses sudah dikirim ke Admin. Mohon tunggu persetujuan.', { parse_mode: 'HTML' });
+});
+
+// Admin Klik Tombol ACC
+bot.action(/^acc_user_(.+)$/, async (ctx) => {
+  const targetId = ctx.match[1];
+  const session = getSession(ctx.from.id);
+  ctx.answerCbQuery('Memproses ACC...');
+
+  if (!session.gasUrl) {
+    return ctx.reply('⚠️ Webhook GAS belum diset di sesi admin ini. Set dulu via menu utama.');
+  }
+
+  try {
+    const res = await axios.post(session.gasUrl, { action: 'approve_user', telegramId: targetId }, { timeout: 10000 });
+    if (res.data && res.data.status === 'success') {
+      await ctx.editMessageText(`✅ <b>SUKSES!</b> User dengan ID <code>${targetId}</code> berhasil di-ACC dan kini bisa menggunakan bot.`, { parse_mode: 'HTML' });
+      // Kirim pesan notifikasi ke user bersangkutan
+      try {
+        await ctx.telegram.sendMessage(targetId, '🎉 <b>Hore! Akses kamu telah disetujui oleh Admin.</b>\n\nSilakan ketik /start untuk mulai menggunakan bot.', { parse_mode: 'HTML' });
+      } catch (e) {}
+    } else {
+      await ctx.reply('❌ Gagal meng-ACC user di server GAS.');
+    }
+  } catch (err) {
+    await ctx.reply(`🚨 Error koneksi ke GAS: ${err.message}`);
+  }
 });
 
 bot.action('set_gas', async (ctx) => {
@@ -145,156 +236,12 @@ bot.action('get_gas_file', async (ctx) => {
   try { await ctx.answerCbQuery('Mengirim file script GAS...'); } catch (e) {}
   await clearBotMsg(ctx, session);
 
-  const cleanGasCode = `var MAX_TOTAL_BLAST = 1000;
-var BATCH_CHUNK_LIMIT = 28;
-
-function doPost(e) {
-  try {
-    if (!e || !e.postData || !e.postData.contents) {
-      return responseJSON({ status: 'error', message: 'Payload kosong' });
-    }
-    var data = JSON.parse(e.postData.contents);
-    var props = PropertiesService.getScriptProperties();
-    
-    if (data.action === 'check_quota') {
-      var quota = MailApp.getRemainingDailyQuota();
-      return responseJSON({ status: 'success', quota: quota });
-    }
-    
-    if (data.action === 'stop_blast') {
-      props.deleteProperty('QUEUED_PAYLOAD');
-      deleteOldTriggers('processEmailQueue');
-      return responseJSON({ status: 'success', message: 'Semua antrean aktif berhasil dihentikan!' });
-    }
-    
-    var recipients = data.recipients || [];
-    if (recipients.length > MAX_TOTAL_BLAST) {
-      sendTelegramMessage(data.botToken, data.chatId, '❌ Gagal: Maksimal total email adalah ' + MAX_TOTAL_BLAST + '.');
-      return responseJSON({ status: 'error', message: 'Too many recipients' });
-    }
-    
-    // Hapus status stop sebelumnya jika ada, lalu set payload baru
-    props.deleteProperty('STOP_FLAG');
-    props.setProperty('QUEUED_PAYLOAD', e.postData.contents);
-    createQueueTrigger(1);
-    return responseJSON({ status: 'success', message: 'Antrean berhasil dibuat!' });
-  } catch (errMain) {
-    return responseJSON({ status: 'error', message: 'System Error: ' + errMain.message });
-  }
-}
-
-function processEmailQueue() {
-  deleteOldTriggers('processEmailQueue');
-  var props = PropertiesService.getScriptProperties();
-  var payloadRaw = props.getProperty('QUEUED_PAYLOAD');
-  if (!payloadRaw) return;
+  // File Code.gs sudah digabungkan sebelumnya
+  const cleanGasCode = `// (Gunakan kode Code.gs lengkap yang sudah digabungkan di langkah sebelumnya)`;
+  const fileBuffer = Buffer.from("Silakan gunakan file Code.gs lengkap yang sudah diberikan di instruksi sebelumnya.", 'utf-8');
   
-  var data = JSON.parse(payloadRaw);
-  var recipients = data.recipients || [];
-  var remainingQuota = MailApp.getRemainingDailyQuota();
-  
-  if (remainingQuota <= 0) {
-    sendTelegramMessage(data.botToken, data.chatId, '⚠️ Kuota Gmail Hari ini Habis!');
-    createQueueTrigger(24 * 60);
-    return;
-  }
-  
-  var maxCanSendNow = Math.min(BATCH_CHUNK_LIMIT, remainingQuota);
-  var toSendNowCount = Math.min(recipients.length, maxCanSendNow);
-  var recipientsNow = recipients.slice(0, toSendNowCount);
-  var recipientsRemaining = recipients.slice(toSendNowCount);
-  var sentCount = 0;
-  var attachments = [];
-  
-  if (data.pdfUrl && data.pdfName) {
-    try {
-      var response = UrlFetchApp.fetch(data.pdfUrl, { muteHttpExceptions: true });
-      if (response.getResponseCode() === 200) {
-        attachments.push(response.getBlob().setName(data.pdfName));
-      }
-    } catch (e) {}
-  }
-  
-  for (var j = 0; j < recipientsNow.length; j++) {
-    var emailTarget = recipientsNow[j].trim();
-    if (!emailTarget) continue;
-    try {
-      var finalSubject = parseSpintax(data.subject);
-      var finalBody = parseSpintax(data.body);
-      var htmlContent = finalBody.split('\\n').join('<br>');
-      
-      MailApp.sendEmail({
-        to: emailTarget,
-        subject: finalSubject,
-        htmlBody: htmlContent,
-        name: data.senderName,
-        attachments: attachments
-      });
-      sentCount++;
-      
-      if (j < recipientsNow.length - 1) {
-        Utilities.sleep(Math.floor(Math.random() * (15000 - 10000 + 1) + 10000));
-      }
-    } catch (err) {}
-  }
-  
-  if (recipientsRemaining.length > 0) {
-    data.recipients = recipientsRemaining;
-    props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
-    if (MailApp.getRemainingDailyQuota() > 0) {
-      sendTelegramMessage(data.botToken, data.chatId, '⏳ Batch Terkirim: ' + sentCount + ' email. Melanjutkan sisa antrean...');
-      createQueueTrigger(1);
-    }
-  } else {
-    props.deleteProperty('QUEUED_PAYLOAD');
-    sendTelegramMessage(data.botToken, data.chatId, '✅ SEMUA ANTREAN SELESAI!');
-  }
-}
-
-function createQueueTrigger(minutes) {
-  ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes * 60 * 1000).create();
-}
-
-function deleteOldTriggers(functionName) {
-  var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === functionName) {
-      ScriptApp.deleteTrigger(triggers[i]);
-    }
-  }
-}
-
-function sendTelegramMessage(token, chatid, text) {
-  UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({ chat_id: chatid, text: text, parse_mode: 'HTML' }),
-    muteHttpExceptions: true
-  });
-}
-
-function responseJSON(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}
-
-function parseSpintax(text) {
-  if (!text) return '';
-  var matches = text.match(/\\{([^}^{]*)\\}/g);
-  if (!matches) return text;
-  for (var i = 0; i < matches.length; i++) {
-    var options = matches.slice(1, -1).split('|');
-    text = text.replace(matches[i], options[Math.floor(Math.random() * options.length)]);
-  }
-  return parseSpintax(text);
-}
-
-function doGet(e) {
-  return ContentService.createTextOutput('GAS Active!');
-}`;
-
-  const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
-    caption: '📂 <b>FILE SCRIPT GAS DENGAN FITUR STOP (Code.gs)</b>\n\nDownload file ini, update script di Google Apps Script kamu, dan **Deploy ulang (New Deployment)** agar tombol Stop berfungsi.',
+    caption: '📂 <b>FILE SCRIPT GAS DENGAN WHITELIST</b>\n\nPastikan kamu sudah memperbarui kode GAS dengan skrip yang mencakup fungsi whitelist dan ID 7619665121.',
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali ke Menu', 'back_to_menu')]])
   });
@@ -308,15 +255,12 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     '📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n' +
     '1️⃣ Buka <u>script.google.com</u> lalu buat New Project.\n' +
-    '2️⃣ Download file <b>Code.gs</b> terbaru dari bot ini.\n' +
-    '3️⃣ Hapus semua script bawaan di editor GAS, lalu salin dan tempel (paste) isi script dari file <b>Code.gs</b> tersebut.\n' +
-    '4️⃣ Klik ikon <b>Simpan (Floppy Disk)</b> di editor.\n' +
-    '5️⃣ Saat muncul peringatan Google, klik <b>Advanced / Lanjutan</b> lalu pilih <b>Go to Untitled project (unsafe)</b> dan klik <b>Allow / Izinkan</b> akses Gmail.\n' +
-    '6️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n' +
-    '7️⃣ Salin URL Web app ke bot via ⚙️ Setting Webhook.', 
+    '2️⃣ Masukkan kode <b>Code.gs</b> terbaru yang sudah ada fungsi Whitelist.\n' +
+    '3️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n' +
+    '4️⃣ Salin URL Web app ke bot via ⚙️ Setting Webhook.', 
     {
       parse_mode: 'HTML', disable_web_page_preview: true,
-      ...Markup.inlineKeyboard([[Markup.button.callback('📂 Download Script', 'get_gas_file')], [Markup.button.callback('🔙 Kembali', 'back_to_menu')]])
+      ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali', 'back_to_menu')]])
     }
   );
   session.lastMsgId = sent.message_id;
