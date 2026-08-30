@@ -4,7 +4,7 @@ const csv = require('csv-parser');
 const xlsx = require('xlsx');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwIQY-PWAb_GLorEMQcBbVSDB0p3yQ7zwwbeMiaqjTyDg0Jci64F1-jiOeTjoPBMrPu/exec';
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxz1oDDCxR2Llku8fLTMZlZa87jeTnhIzVzLQA9-YrLiJyz7O86QAHueTiGscIaizsK/exec';
 
 const bot = new Telegraf(BOT_TOKEN || '');
 const userSessions = {};
