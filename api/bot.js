@@ -4,8 +4,7 @@ const csv = require('csv-parser');
 const xlsx = require('xlsx');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-// Link GAS terbaru kamu yang sudah terhubung
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwjNy1kGa3ZbwkAvL5p_ZmDQY6WyKZrf5egStHCDcWNx0Dn6K6AJYdqOOp9bPFR3XNA/exec';
+const DEFAULT_GAS_URL = '';
 
 const bot = new Telegraf(BOT_TOKEN || '');
 const userSessions = {};
@@ -39,17 +38,14 @@ const clearUserMsg = async (ctx) => {
   }
 };
 
-// Middleware Pengecekan Akses (Whitelist via GAS) dengan Bypass Admin Mutlak (ID: 7619665121)
 const checkAccessMiddleware = async (ctx, next) => {
   const userId = ctx.from ? ctx.from.id : null;
   if (!userId) return;
 
-  // BYPASS MUTLAK UNTUK ADMIN UTAMA
   if (String(userId) === "7619665121") {
     return next();
   }
 
-  // Bypass untuk command callback ACC dari admin
   if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('acc_user_')) {
     return next();
   }
@@ -57,11 +53,10 @@ const checkAccessMiddleware = async (ctx, next) => {
   const session = getSession(userId);
 
   if (!session.gasUrl) {
-    await ctx.reply('⚠️ Bot belum dikonfigurasi oleh Admin.');
+    await ctx.reply('⚠️ Bot belum dikonfigurasi oleh Admin. Silakan setting webhook terlebih dahulu.');
     return;
   }
 
-  // Cek ke Google Apps Script apakah user ini sudah di-ACC
   try {
     const res = await axios.post(session.gasUrl, { action: 'check_access', telegramId: userId }, { timeout: 10000 });
     if (res.data && res.data.allowed) {
@@ -69,7 +64,6 @@ const checkAccessMiddleware = async (ctx, next) => {
     }
   } catch (e) {}
 
-  // Jika belum di-ACC, tampilkan tombol Minta Akses
   await clearBotMsg(ctx, session);
   const sent = await ctx.reply(
     '⛔ <b>AKSES DITOLAK</b>\n\nBot ini bersifat privat dan hanya bisa digunakan oleh user yang sudah di-ACC oleh Admin. Silakan klik tombol di bawah untuk meminta akses.',
@@ -118,7 +112,6 @@ const mainMenu = Markup.inlineKeyboard([
   [Markup.button.url('👤 Owner (@andiigndr29)', 'https://instagram.com/andiigndr29')]
 ]);
 
-// Terapkan middleware keamanan
 bot.use(checkAccessMiddleware);
 
 bot.start(async (ctx) => {
@@ -129,7 +122,6 @@ bot.start(async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Request Akses oleh User (Menggunakan HTTP API langsung agar aman di Serverless Vercel)
 bot.action(/^req_(.+)$/, async (ctx) => {
   const userId = ctx.match[1];
   const user = ctx.from;
@@ -154,7 +146,6 @@ bot.action(/^req_(.+)$/, async (ctx) => {
   await ctx.editMessageText('⏳ Permintaan akses sudah dikirim ke Admin. Mohon tunggu persetujuan.', { parse_mode: 'HTML' }).catch(() => {});
 });
 
-// Admin ACC User
 bot.action(/^acc_user_(.+)$/, async (ctx) => {
   const targetId = ctx.match[1];
   const session = getSession(ctx.from.id);
@@ -427,13 +418,22 @@ bot.action('view_session', async (ctx) => {
 });
 
 bot.action('reset_session', async (ctx) => {
+  userSessions[ctx.from.id] = { 
+    step: 'IDLE', 
+    isProcessing: false, 
+    recipients: [], 
+    senderName: '', 
+    subject: '', 
+    body: '', 
+    pdf: null, 
+    gasUrl: '', 
+    lastMsgId: null 
+  };
   const session = getSession(ctx.from.id);
-  const gasUrlBack = session.gasUrl;
-  userSessions[ctx.from.id] = { step: 'IDLE', isProcessing: false, recipients: [], senderName: '', subject: '', body: '', pdf: null, gasUrl: gasUrlBack, lastMsgId: null };
-  ctx.answerCbQuery('Sesi Di-reset!');
+  ctx.answerCbQuery('Sesi & Webhook Di-reset!');
   await clearBotMsg(ctx, session);
-  const sent = await ctx.reply('🧹 Data sesi dibersihkan.', mainMenu);
-  userSessions[ctx.from.id].lastMsgId = sent.message_id;
+  const sent = await ctx.reply('🧹 Data sesi dan Webhook berhasil dibersihkan. Silakan setting ulang webhook.', mainMenu);
+  session.lastMsgId = sent.message_id;
 });
 
 bot.action('cancel', async (ctx) => {
