@@ -69,7 +69,7 @@ const checkAccessMiddleware = async (ctx, next) => {
     }
   } catch (e) {}
 
-  // Jika belum di-ACC, tampilkan tombol Minta Akses (callback dipendekkan agar aman dari error 64 byte)
+  // Jika belum di-ACC, tampilkan tombol Minta Akses
   await clearBotMsg(ctx, session);
   const sent = await ctx.reply(
     '⛔ <b>AKSES DITOLAK</b>\n\nBot ini bersifat privat dan hanya bisa digunakan oleh user yang sudah di-ACC oleh Admin. Silakan klik tombol di bawah untuk meminta akses.',
@@ -129,26 +129,29 @@ bot.start(async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Request Akses oleh User (Menggunakan prefix 'req_')
+// Request Akses oleh User (Menggunakan HTTP API langsung agar aman di Serverless Vercel)
 bot.action(/^req_(.+)$/, async (ctx) => {
   const userId = ctx.match[1];
   const user = ctx.from;
-  await ctx.answerCbQuery('Permintaan akses dikirim ke Admin!');
+  
+  await ctx.answerCbQuery('Permintaan terkirim!').catch(() => {});
 
   try {
-    await bot.telegram.sendMessage(
-      "7619665121",
-      `🔔 <b>PERMINTAAN AKSES BARU</b>\n\n👤 Nama: ${user.first_name || '-'} ${user.last_name || ''}\n🔗 Username: @${user.username || 'Tidak ada'}\n🆔 ID: <code>${userId}</code>`,
-      {
-        parse_mode: 'HTML',
-        ...Markup.inlineKeyboard([[Markup.button.callback('✅ ACC SEKARANG', `acc_user_${userId}`)]])
+    await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      chat_id: "7619665121",
+      text: `🔔 <b>PERMINTAAN AKSES BARU</b>\n\n👤 Nama: ${user.first_name || '-'} ${user.last_name || ''}\n🔗 Username: @${user.username || 'Tidak ada'}\n🆔 ID: <code>${userId}</code>`,
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '✅ ACC SEKARANG', callback_data: `acc_user_${userId}` }]
+        ]
       }
-    );
+    });
   } catch (err) {
-    console.error("Gagal kirim pesan ke admin:", err.message);
+    console.error("Gagal kirim via HTTP API:", err.message);
   }
 
-  await ctx.editMessageText('⏳ Permintaan akses sudah dikirim ke Admin. Mohon tunggu persetujuan.', { parse_mode: 'HTML' });
+  await ctx.editMessageText('⏳ Permintaan akses sudah dikirim ke Admin. Mohon tunggu persetujuan.', { parse_mode: 'HTML' }).catch(() => {});
 });
 
 // Admin ACC User
