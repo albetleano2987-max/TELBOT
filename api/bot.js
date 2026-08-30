@@ -4,8 +4,8 @@ const csv = require('csv-parser');
 const xlsx = require('xlsx');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-// Masukkan link Web App GAS kamu di bawah ini agar otomatis terhubung (tidak perlu klik Setting Webhook lagi)
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbw.../exec'; // <-- Ganti dengan link GAS /exec kamu
+// Link GAS kamu sudah dipasang otomatis di sini
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwJIgEOIa7mc-yyl8Z29i9WRaR3-0DTgpkR63y8ac0DBZB49dZtFhXQUFAxOcCQQt0/exec';
 
 const bot = new Telegraf(BOT_TOKEN || '');
 const userSessions = {};
