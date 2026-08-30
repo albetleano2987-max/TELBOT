@@ -55,7 +55,6 @@ const extractEmailsFromFile = async (ctx, docId) => {
   } catch (err) { return null; }
 };
 
-// Tata letak tombol baru yang lebih clean, simetris, dan ada tombol Owner IG
 const mainMenu = Markup.inlineKeyboard([
   [Markup.button.callback('🚀 MULAI BLAST', 'start_blast')],
   [Markup.button.callback('📂 Download Script', 'get_gas_file'), Markup.button.callback('📖 Cara Pasang', 'tutorial_gas')],
@@ -68,7 +67,7 @@ bot.start(async (ctx) => {
   const session = getSession(ctx.from.id);
   await clearUserMsg(ctx);
   await clearBotMsg(ctx, session);
-  const sent = await ctx.reply('⚡ <b>MAILBLAST GEN-Z SYSTEM</b> ⚡\n\nBot blast anti-spam dengan Auto Reschedule & File Script Aman.\n\nSilahkan pilih menu:', { parse_mode: 'HTML', ...mainMenu });
+  const sent = await ctx.reply('<b>Don\'t Spam Bot !</b>', { parse_mode: 'HTML', ...mainMenu });
   session.lastMsgId = sent.message_id;
 });
 
@@ -258,7 +257,7 @@ bot.action('back_to_menu', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
   await clearBotMsg(ctx, session);
-  const sent = await ctx.reply('⚡ <b>MAILBLAST GEN-Z SYSTEM</b> ⚡\n\nSilahkan pilih menu:', { parse_mode: 'HTML', ...mainMenu });
+  const sent = await ctx.reply('<b>Don\'t Spam Bot !</b>', { parse_mode: 'HTML', ...mainMenu });
   session.lastMsgId = sent.message_id;
 });
 
