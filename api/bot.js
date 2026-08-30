@@ -56,7 +56,7 @@ const extractEmailsFromFile = async (ctx, docId) => {
 };
 
 const mainMenu = Markup.inlineKeyboard([
-  [Markup.button.callback('🚀 MULAI BLAST', 'start_blast')],
+  [Markup.button.callback('🚀 MULAI BLAST', 'start_blast'), Markup.button.callback('🛑 STOP BLAST', 'stop_blast')],
   [Markup.button.callback('📂 Download Script', 'get_gas_file'), Markup.button.callback('📖 Cara Pasang', 'tutorial_gas')],
   [Markup.button.callback('🔋 Cek Kuota Gmail', 'check_quota'), Markup.button.callback('⚙️ Setting Webhook', 'set_gas')],
   [Markup.button.callback('📊 Cek Sesi', 'view_session'), Markup.button.callback('🧹 Reset Data', 'reset_session')],
@@ -93,6 +93,28 @@ bot.action('start_blast', async (ctx) => {
   await clearBotMsg(ctx, session);
   const sent = await ctx.reply('📧 <b>Upload File CSV / EXCEL (.xlsx) Isi Email Target (Max 1000):</b>', { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Batalkan', 'cancel')]]) });
   session.lastMsgId = sent.message_id;
+});
+
+bot.action('stop_blast', async (ctx) => {
+  const session = getSession(ctx.from.id);
+  ctx.answerCbQuery();
+  if (!session.gasUrl) {
+    const sent = await ctx.reply('⚠️ Webhook GAS belum di-set!', mainMenu);
+    session.lastMsgId = sent.message_id;
+    return;
+  }
+  await clearBotMsg(ctx, session);
+  const loadingMsg = await ctx.reply('⏳ Mengirim sinyal stop ke GAS...');
+  try {
+    const response = await axios.post(session.gasUrl, { action: 'stop_blast', botToken: BOT_TOKEN, chatId: ctx.from.id }, { timeout: 15000 });
+    try { await ctx.deleteMessage(loadingMsg.message_id); } catch(e){}
+    const sent = await ctx.reply(`🛑 <b>SINYAL STOP DIKIRIM</b>\n\n${response.data.message || 'Antrean berhasil dibatalkan.'}`, { parse_mode: 'HTML', ...mainMenu });
+    session.lastMsgId = sent.message_id;
+  } catch (err) {
+    try { await ctx.deleteMessage(loadingMsg.message_id); } catch(e){}
+    const sent = await ctx.reply(`🚨 Gagal menghentikan blast: ${err.message}`, mainMenu);
+    session.lastMsgId = sent.message_id;
+  }
 });
 
 bot.action('check_quota', async (ctx) => {
@@ -132,10 +154,17 @@ function doPost(e) {
       return responseJSON({ status: 'error', message: 'Payload kosong' });
     }
     var data = JSON.parse(e.postData.contents);
+    var props = PropertiesService.getScriptProperties();
     
     if (data.action === 'check_quota') {
       var quota = MailApp.getRemainingDailyQuota();
       return responseJSON({ status: 'success', quota: quota });
+    }
+    
+    if (data.action === 'stop_blast') {
+      props.deleteProperty('QUEUED_PAYLOAD');
+      deleteOldTriggers('processEmailQueue');
+      return responseJSON({ status: 'success', message: 'Semua antrean aktif berhasil dihentikan!' });
     }
     
     var recipients = data.recipients || [];
@@ -144,7 +173,9 @@ function doPost(e) {
       return responseJSON({ status: 'error', message: 'Too many recipients' });
     }
     
-    PropertiesService.getScriptProperties().setProperty('QUEUED_PAYLOAD', e.postData.contents);
+    // Hapus status stop sebelumnya jika ada, lalu set payload baru
+    props.deleteProperty('STOP_FLAG');
+    props.setProperty('QUEUED_PAYLOAD', e.postData.contents);
     createQueueTrigger(1);
     return responseJSON({ status: 'success', message: 'Antrean berhasil dibuat!' });
   } catch (errMain) {
@@ -211,7 +242,7 @@ function processEmailQueue() {
     data.recipients = recipientsRemaining;
     props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
     if (MailApp.getRemainingDailyQuota() > 0) {
-      sendTelegramMessage(data.botToken, data.chatId, '⏳ Batch Terkirim: ' + sentCount + ' email. Melanjutkan...');
+      sendTelegramMessage(data.botToken, data.chatId, '⏳ Batch Terkirim: ' + sentCount + ' email. Melanjutkan sisa antrean...');
       createQueueTrigger(1);
     }
   } else {
@@ -263,7 +294,7 @@ function doGet(e) {
 
   const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
-    caption: '📂 <b>FILE SCRIPT GAS BARU (Code.gs)</b>\n\nKarena ada update fitur Cek Kuota, jangan lupa download script ini dan update/paste ulang di project Google Apps Script kamu, lalu deploy ulang!',
+    caption: '📂 <b>FILE SCRIPT GAS DENGAN FITUR STOP (Code.gs)</b>\n\nDownload file ini, update script di Google Apps Script kamu, dan **Deploy ulang (New Deployment)** agar tombol Stop berfungsi.',
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali ke Menu', 'back_to_menu')]])
   });
