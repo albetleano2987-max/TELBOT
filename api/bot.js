@@ -250,7 +250,7 @@ bot.action('tutorial_gas', async (ctx) => {
     '📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n' +
     '1️⃣ Buka <u>script.google.com</u> lalu buat New Project.\n' +
     '2️⃣ Download file <b>Code.gs</b> dari bot ini.\n' +
-    '3️⃣ Salin dan tempel (paste) isi script tersebut ke editor GAS.\n' +
+    '3️⃣ Hapus semua script bawaan di editor GAS, lalu salin dan tempel (paste) isi script dari file <b>Code.gs</b> tersebut.\n' +
     '4️⃣ Klik ikon <b>Simpan (Floppy Disk)</b> di editor.\n' +
     '5️⃣ Saat muncul peringatan Google, klik <b>Advanced / Lanjutan</b> lalu pilih <b>Go to Untitled project (unsafe)</b> dan klik <b>Allow / Izinkan</b> akses Gmail.\n' +
     '6️⃣ Deploy sebagai Web app (Execute as: Me, Access: Anyone).\n' +
