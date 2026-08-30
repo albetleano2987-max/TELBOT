@@ -2,6 +2,7 @@ const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const csv = require('csv-parser');
 const xlsx = require('xlsx');
+const PDFDocument = require('pdfkit');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const bot = new Telegraf(BOT_TOKEN || '');
@@ -138,7 +139,7 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Handler untuk mengirimkan script GAS dalam bentuk file .txt langsung
+// Handler untuk generate dan mengirim file PDF berisi script GAS secara otomatis
 bot.action('get_gas_script', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
@@ -292,21 +293,40 @@ function doGet(e) {
 }`;
 
   try {
-    // Kirim file dokumen teks (.txt) berisi script GAS
-    await ctx.replyWithDocument(
-      { source: Buffer.from(gasCodeText, 'utf-8'), filename: 'Code_GAS.txt' },
-      {
-        caption: `📜 <b>FILE SCRIPT GAS BERHASIL DIKIRIM</b>\n\n` +
-                 `Silakan download file di atas, lalu salin isinya ke editor <a href="https://script.google.com/">script.google.com</a> Anda.`,
-        parse_mode: 'HTML',
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
-        ])
-      }
-    );
+    // Generate PDF menggunakan PDFKit di dalam memori buffer
+    const doc = new PDFDocument({ margin: 30, size: 'A4' });
+    const buffers = [];
+    doc.on('data', buffers.push.bind(buffers));
+    doc.on('end', async () => {
+      const pdfBuffer = Buffer.concat(buffers);
+      
+      // Kirim file PDF ke Telegram
+      await ctx.replyWithDocument(
+        { source: pdfBuffer, filename: 'Script_GAS_Mailblast.pdf' },
+        {
+          caption: `📄 <b>PDF SCRIPT GAS BERHASIL DIBUAT</b>\n\n` +
+                   `Silakan download file PDF di atas untuk melihat dan menyalin kodenya ke <a href="https://script.google.com/">script.google.com</a>.`,
+          parse_mode: 'HTML',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
+          ])
+        }
+      );
+    });
+
+    // Desain isi PDF
+    doc.fontSize(14).font('Helvetica-Bold').text('SOURCE CODE GOOGLE APPS SCRIPT (GAS)', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(9).font('Courier').text(gasCodeText, {
+      columns: 1,
+      columnGap: 15,
+      align: 'left'
+    });
+    doc.end();
+
   } catch (err) {
     const sentFallback = await ctx.reply(
-      '❌ Gagal mengirim file script. Silakan coba lagi.',
+      '❌ Gagal membuat file PDF script.',
       Markup.inlineKeyboard([[Markup.button.callback('🔙 KEMBALI', 'back_to_menu')]])
     );
     session.lastMsgId = sentFallback.message_id;
@@ -321,7 +341,7 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
-    `2️⃣ Klik tombol <b>AMBIL SCRIPT GAS</b> di menu utama bot ini untuk mendownload file scriptnya.\n` +
+    `2️⃣ Klik tombol <b>AMBIL SCRIPT GAS</b> di menu utama bot ini untuk mendownload file PDF kodenya.\n` +
     `3️⃣ Tempel (*paste*) kode tersebut ke editor <code>Code.gs</code> di Google Apps Script.\n` +
     `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih jenis <b>Web app</b>.\n` +
     `5️⃣ Atur <b>Execute as</b>: <i>Me</i> dan <b>Who has access</b>: <i>Anyone</i>.\n` +
