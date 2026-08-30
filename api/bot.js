@@ -1,4 +1,3 @@
-
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const csv = require('csv-parser');
@@ -142,7 +141,7 @@ bot.action('start_blast', async (ctx) => {
 bot.action('get_gas_script', async (ctx) => {
   const session = getSession(ctx.from.id);
   try {
-    await ctx.answerCbQuery('Menampilkan script GAS...');
+    await ctx.answerCbQuery('Mengirim file script GAS...');
   } catch (e) {}
 
   await clearBotMsg(ctx, session);
@@ -258,18 +257,22 @@ function generateAntiSpamFootprint() {
 
 function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
 
-  const sent = await ctx.reply(
-    `📜 <b>SCRIPT GOOGLE APPS SCRIPT (GAS)</b>\n\n` +
-    `<i>Ketuk kotak kode di bawah untuk menyalin:</i>\n` +
-    `<pre><code>${gasCodeText}</code></pre>`,
+  // Kirim file script sebagai dokumen (.js / .html)
+  const fileBuffer = Buffer.from(gasCodeText, 'utf-8');
+  
+  await ctx.replyWithDocument(
+    { source: fileBuffer, filename: 'Code.gs' },
     {
+      caption: '📜 <b>SCRIPT GOOGLE APPS SCRIPT (GAS)</b>\n\nDownload file di atas, lalu salin isinya ke editor Google Apps Script kamu.',
       parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
       ])
     }
   );
-  session.lastMsgId = sent.message_id;
+  
+  // Simpan reference message ID terakhir jika diperlukan untuk hapus pesan bersih
+  session.lastMsgId = null; // karena dokumen dikirim terpisah, biarkan aman
 });
 
 bot.action('tutorial_gas', async (ctx) => {
@@ -280,8 +283,8 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
-    `2️⃣ Klik tombol <b>📜 AMBIL SCRIPT GAS</b> di bot ini untuk memunculkan kode script.\n` +
-    `3️⃣ Salin dan tempel kodenya ke editor <code>Code.gs</code>.\n` +
+    `2️⃣ Klik tombol <b>📜 AMBIL SCRIPT GAS</b> untuk mendownload file <code>Code.gs</code>.\n` +
+    `3️⃣ Buka filenya, salin semua kodenya, dan tempel ke editor Google Apps Script.\n` +
     `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih <b>Web app</b>.\n` +
     `5️⃣ Atur <b>Execute as</b>: <i>Me</i> & <b>Who has access</b>: <i>Anyone</i>.\n` +
     `6️⃣ Salin URL Web App dan masukkan ke bot via <b>⚙️ SETTING WEBHOOK GAS</b>.`,
