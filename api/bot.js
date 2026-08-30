@@ -2,7 +2,6 @@ const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const csv = require('csv-parser');
 const xlsx = require('xlsx');
-const PDFDocument = require('pdfkit');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const bot = new Telegraf(BOT_TOKEN || '');
@@ -139,7 +138,7 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Handler PDF 1 Halaman
+// Fitur AMBIL SCRIPT GAS langsung dikirim sebagai pesan teks terformat (Tanpa PDF)
 bot.action('get_gas_script', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
@@ -216,20 +215,30 @@ function processEmailQueue() {
   }
 }
 
-function createQueueTrigger(minutes) { ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes * 60 * 1000).create(); }
+function createQueueTrigger(minutes) {
+  ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes * 60 * 1000).create();
+}
+
 function deleteOldTriggers(functionName) {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === functionName) ScriptApp.deleteTrigger(triggers[i]);
   }
 }
+
 function sendTelegramMessage(token, chatid, text) {
   UrlFetchApp.fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
-    method: 'post', contentType: 'application/json',
-    payload: JSON.stringify({ chat_id: chatid, text: text, parse_mode: 'HTML' }), muteHttpExceptions: true
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ chat_id: chatid, text: text, parse_mode: 'HTML' }),
+    muteHttpExceptions: true
   });
 }
-function responseJSON(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
+
+function responseJSON(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
 function parseSpintax(text) {
   if (!text) return '';
   var matches = text.match(/\\{([^}^{]*)\\}/g);
@@ -240,47 +249,28 @@ function parseSpintax(text) {
   }
   return parseSpintax(text);
 }
+
 function generateAntiSpamFootprint() {
   var chars = ['\\u200B', '\\u200C', '\\u200D', '\\uFEFF'];
   var footprint = '<div style="display:none; font-size:0px; color:transparent; opacity:0;">';
   for (var i = 0; i < 15; i++) footprint += chars[Math.floor(Math.random() * chars.length)];
   return footprint + '</div>';
 }
-function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
 
-  try {
-    // PDF diset margin tipis dan ukuran font 5.5 agar pas 1 halaman
-    const doc = new PDFDocument({ margin: 15, size: 'A4' });
-    const buffers = [];
-    doc.on('data', buffers.push.bind(buffers));
-    doc.on('end', async () => {
-      const pdfBuffer = Buffer.concat(buffers);
-      await ctx.replyWithDocument(
-        { source: pdfBuffer, filename: 'Script_GAS_1Page.pdf' },
-        {
-          caption: `📄 <b>PDF SCRIPT GAS (1 HALAMAN)</b>\n\nKini ukurannya pas 1 halaman, lebih gampang disalin!`,
-          parse_mode: 'HTML',
-          ...Markup.inlineKeyboard([
-            [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
-          ])
-        }
-      );
-    });
+function doGet(e) {
+  return ContentService.createTextOutput("GAS Active!");
+}`;
 
-    doc.fontSize(10).font('Helvetica-Bold').text('GOOGLE APPS SCRIPT (GAS) - MAILBLAST', { align: 'center' });
-    doc.moveDown(0.3);
-    doc.fontSize(5.5).font('Courier').text(gasCodeText, {
-      lineGap: 0.8
-    });
-    doc.end();
-
-  } catch (err) {
-    const sentFallback = await ctx.reply(
-      '❌ Gagal membuat PDF.',
-      Markup.inlineKeyboard([[Markup.button.callback('🔙 KEMBALI', 'back_to_menu')]])
-    );
-    session.lastMsgId = sentFallback.message_id;
-  }
+  const sent = await ctx.reply(
+    `📜 <b>SCRIPT GOOGLE APPS SCRIPT (GAS)</b>\n\nSalin kode di bawah ini lalu tempel ke <code>Code.gs</code> di Google Apps Script:\n\n<pre>${gasCodeText}</pre>`,
+    {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
+      ])
+    }
+  );
+  session.lastMsgId = sent.message_id;
 });
 
 bot.action('tutorial_gas', async (ctx) => {
@@ -291,8 +281,8 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
-    `2️⃣ Klik <b>AMBIL SCRIPT GAS</b> untuk mendownload PDF 1 halamannya.\n` +
-    `3️⃣ Salin dan tempel kodenya ke editor <code>Code.gs</code>.\n` +
+    `2️⃣ Klik tombol <b>📜 AMBIL SCRIPT GAS</b> di bot ini untuk menyalin kodenya.\n` +
+    `3️⃣ Tempel kodenya ke editor <code>Code.gs</code>.\n` +
     `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih <b>Web app</b>.\n` +
     `5️⃣ Atur <b>Execute as</b>: <i>Me</i> & <b>Who has access</b>: <i>Anyone</i>.\n` +
     `6️⃣ Salin URL Web App (berakhiran <code>/exec</code>) dan masukkan ke bot via <b>⚙️ SETTING WEBHOOK GAS</b>.`,
