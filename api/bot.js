@@ -58,7 +58,7 @@ const extractEmailsFromFile = async (ctx, docId) => {
 const mainMenu = Markup.inlineKeyboard([
   [Markup.button.callback('🚀 MULAI BLAST', 'start_blast')],
   [Markup.button.callback('📂 Download Script', 'get_gas_file'), Markup.button.callback('📖 Cara Pasang', 'tutorial_gas')],
-  [Markup.button.callback('⚙️ Setting Webhook', 'set_gas')],
+  [Markup.button.callback('🔋 Cek Kuota Gmail', 'check_quota'), Markup.button.callback('⚙️ Setting Webhook', 'set_gas')],
   [Markup.button.callback('📊 Cek Sesi', 'view_session'), Markup.button.callback('🧹 Reset Data', 'reset_session')],
   [Markup.button.url('👤 Owner (@andiigndr29)', 'https://instagram.com/andiigndr29')]
 ]);
@@ -95,6 +95,29 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
+bot.action('check_quota', async (ctx) => {
+  const session = getSession(ctx.from.id);
+  ctx.answerCbQuery();
+  if (!session.gasUrl) {
+    await clearBotMsg(ctx, session);
+    const sent = await ctx.reply('⚠️ Webhook GAS belum di-set!', mainMenu);
+    session.lastMsgId = sent.message_id;
+    return;
+  }
+  await clearBotMsg(ctx, session);
+  const loadingMsg = await ctx.reply('⏳ Mengecek sisa kuota Gmail ke GAS...');
+  try {
+    const response = await axios.post(session.gasUrl, { action: 'check_quota', botToken: BOT_TOKEN, chatId: ctx.from.id }, { timeout: 15000 });
+    try { await ctx.deleteMessage(loadingMsg.message_id); } catch(e){}
+    const sent = await ctx.reply(`🔋 <b>INFO KUOTA GMAIL</b>\n\nSisa kuota kirim hari ini: <b>${response.data.quota !== undefined ? response.data.quota : 'Tidak diketahui'} email</b>`, { parse_mode: 'HTML', ...mainMenu });
+    session.lastMsgId = sent.message_id;
+  } catch (err) {
+    try { await ctx.deleteMessage(loadingMsg.message_id); } catch(e){}
+    const sent = await ctx.reply(`🚨 Gagal mengecek kuota: ${err.message}`, mainMenu);
+    session.lastMsgId = sent.message_id;
+  }
+});
+
 bot.action('get_gas_file', async (ctx) => {
   const session = getSession(ctx.from.id);
   try { await ctx.answerCbQuery('Mengirim file script GAS...'); } catch (e) {}
@@ -109,8 +132,13 @@ function doPost(e) {
       return responseJSON({ status: 'error', message: 'Payload kosong' });
     }
     var data = JSON.parse(e.postData.contents);
-    var recipients = data.recipients || [];
     
+    if (data.action === 'check_quota') {
+      var quota = MailApp.getRemainingDailyQuota();
+      return responseJSON({ status: 'success', quota: quota });
+    }
+    
+    var recipients = data.recipients || [];
     if (recipients.length > MAX_TOTAL_BLAST) {
       sendTelegramMessage(data.botToken, data.chatId, '❌ Gagal: Maksimal total email adalah ' + MAX_TOTAL_BLAST + '.');
       return responseJSON({ status: 'error', message: 'Too many recipients' });
@@ -235,7 +263,7 @@ function doGet(e) {
 
   const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
-    caption: '📂 <b>FILE SCRIPT GAS BERSIH (Code.gs)</b>\n\nDownload file ini, lalu copy isi script ke editor Google Apps Script kamu.',
+    caption: '📂 <b>FILE SCRIPT GAS BARU (Code.gs)</b>\n\nKarena ada update fitur Cek Kuota, jangan lupa download script ini dan update/paste ulang di project Google Apps Script kamu, lalu deploy ulang!',
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali ke Menu', 'back_to_menu')]])
   });
@@ -249,7 +277,7 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     '📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n' +
     '1️⃣ Buka <u>script.google.com</u> lalu buat New Project.\n' +
-    '2️⃣ Download file <b>Code.gs</b> dari bot ini.\n' +
+    '2️⃣ Download file <b>Code.gs</b> terbaru dari bot ini.\n' +
     '3️⃣ Hapus semua script bawaan di editor GAS, lalu salin dan tempel (paste) isi script dari file <b>Code.gs</b> tersebut.\n' +
     '4️⃣ Klik ikon <b>Simpan (Floppy Disk)</b> di editor.\n' +
     '5️⃣ Saat muncul peringatan Google, klik <b>Advanced / Lanjutan</b> lalu pilih <b>Go to Untitled project (unsafe)</b> dan klik <b>Allow / Izinkan</b> akses Gmail.\n' +
