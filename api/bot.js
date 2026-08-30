@@ -46,8 +46,11 @@ const checkAccessMiddleware = async (ctx, next) => {
     return next();
   }
 
-  if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('acc_user_')) {
-    return next();
+  if (ctx.callbackQuery) {
+    const data = ctx.callbackQuery.data;
+    if (data.startsWith('req_') || data.startsWith('acc_user_')) {
+      return next();
+    }
   }
 
   const session = getSession(userId);
