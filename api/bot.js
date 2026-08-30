@@ -162,9 +162,10 @@ function doPost(e) {
     }
     
     if (data.action === 'stop_blast') {
+      props.setProperty('STOP_FLAG', 'true');
       props.deleteProperty('QUEUED_PAYLOAD');
       deleteOldTriggers('processEmailQueue');
-      return responseJSON({ status: 'success', message: 'Semua antrean aktif berhasil dihentikan!' });
+      return responseJSON({ status: 'success', message: 'Sinyal stop diterima! Antrean dan sisa pengiriman berhasil dihentikan.' });
     }
     
     var recipients = data.recipients || [];
@@ -185,6 +186,12 @@ function doPost(e) {
 function processEmailQueue() {
   deleteOldTriggers('processEmailQueue');
   var props = PropertiesService.getScriptProperties();
+  
+  if (props.getProperty('STOP_FLAG') === 'true') {
+    props.deleteProperty('QUEUED_PAYLOAD');
+    return;
+  }
+  
   var payloadRaw = props.getProperty('QUEUED_PAYLOAD');
   if (!payloadRaw) return;
   
@@ -215,6 +222,11 @@ function processEmailQueue() {
   }
   
   for (var j = 0; j < recipientsNow.length; j++) {
+    if (PropertiesService.getScriptProperties().getProperty('STOP_FLAG') === 'true') {
+      sendTelegramMessage(data.botToken, data.chatId, '🛑 <b>BLAST DIHENTIKAN PAKSA</b>\nTotal terkirim sebelum berhenti: ' + sentCount + ' email.');
+      return;
+    }
+
     var emailTarget = recipientsNow[j].trim();
     if (!emailTarget) continue;
     try {
@@ -237,6 +249,10 @@ function processEmailQueue() {
     } catch (err) {}
   }
   
+  if (PropertiesService.getScriptProperties().getProperty('STOP_FLAG') === 'true') {
+    return;
+  }
+
   if (recipientsRemaining.length > 0) {
     data.recipients = recipientsRemaining;
     props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
@@ -290,7 +306,7 @@ function doGet(e) {
 
   const fileBuffer = Buffer.from(cleanGasCode, 'utf-8');
   await ctx.replyWithDocument({ source: fileBuffer, filename: 'Code.gs' }, {
-    caption: '📂 <b>FILE SCRIPT GAS DENGAN FIX ENTER/PARAGRAF (Code.gs)</b>\n\nDownload file ini, update script di Google Apps Script kamu, dan **Deploy ulang (New Deployment)**.',
+    caption: '📂 <b>FILE SCRIPT GAS DENGAN STOP FLAG TERBARU (Code.gs)</b>\n\nDownload file ini atau gunakan fitur Download Script di bot untuk memperbarui script Google Apps Script kamu.',
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('🔙 Kembali ke Menu', 'back_to_menu')]])
   });
@@ -435,7 +451,6 @@ bot.action('execute_blast', async (ctx) => {
   await clearBotMsg(ctx, session);
   try {
     const payload = { chatId: ctx.from.id, botToken: BOT_TOKEN, recipients: session.recipients, senderName: session.senderName, subject: session.subject, body: session.body, pdfUrl: session.pdf ? session.pdf.url : null, pdfName: session.pdf ? session.pdf.name : null };
-    // Menggunakan timeout 15 detik agar aman dari batas Vercel tanpa memutus proses asinkron GAS
     await axios.post(session.gasUrl, payload, { timeout: 15000 });
     const sent = await ctx.reply('✅ <b>Antrean Diterima!</b>\n\nGAS akan mengirimkan email secara bertahap.', { parse_mode: 'HTML', ...mainMenu });
     session.lastMsgId = sent.message_id;
