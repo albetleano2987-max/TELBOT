@@ -2,7 +2,6 @@ const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const csv = require('csv-parser');
 const xlsx = require('xlsx');
-const PDFDocument = require('pdfkit');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const bot = new Telegraf(BOT_TOKEN || '');
@@ -139,7 +138,7 @@ bot.action('start_blast', async (ctx) => {
   session.lastMsgId = sent.message_id;
 });
 
-// Generator PDF 1 Halaman dengan format teks rapi (Line breaks terjaga)
+// Script GAS langsung muncul di chat Telegram dalam bentuk kotak kode
 bot.action('get_gas_script', async (ctx) => {
   const session = getSession(ctx.from.id);
   ctx.answerCbQuery();
@@ -256,39 +255,16 @@ function generateAntiSpamFootprint() {
 
 function doGet(e) { return ContentService.createTextOutput("GAS Active!"); }`;
 
-  try {
-    const doc = new PDFDocument({ margin: 20, size: 'A4' });
-    const buffers = [];
-    doc.on('data', buffers.push.bind(buffers));
-    doc.on('end', async () => {
-      const pdfBuffer = Buffer.concat(buffers);
-      await ctx.replyWithDocument(
-        { source: pdfBuffer, filename: 'Script_GAS_1Page.pdf' },
-        {
-          caption: `📄 <b>PDF SCRIPT GAS (1 HALAMAN)</b>\n\nFormat sudah disesuaikan agar pas 1 halaman dan rapi saat disalin.`,
-          parse_mode: 'HTML',
-          ...Markup.inlineKeyboard([
-            [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
-          ])
-        }
-      );
-    });
-
-    doc.fontSize(9).font('Helvetica-Bold').text('GOOGLE APPS SCRIPT (GAS) - MAILBLAST', { align: 'center' });
-    doc.moveDown(0.2);
-    // Menggunakan ukuran font 5 dan lineGap optimal agar baris ke bawah rapi tidak bertumpuk
-    doc.fontSize(5).font('Courier').text(gasCodeText, {
-      lineGap: 1.1
-    });
-    doc.end();
-
-  } catch (err) {
-    const sentFallback = await ctx.reply(
-      '❌ Gagal membuat PDF.',
-      Markup.inlineKeyboard([[Markup.button.callback('🔙 KEMBALI', 'back_to_menu')]])
-    );
-    session.lastMsgId = sentFallback.message_id;
-  }
+  const sent = await ctx.reply(
+    `📜 <b>SCRIPT GOOGLE APPS SCRIPT (GAS)</b>\n\nKetuk/tahan teks di dalam kotak di bawah ini untuk menyalinnya:\n\n<pre>${gasCodeText}</pre>`,
+    {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
+      ])
+    }
+  );
+  session.lastMsgId = sent.message_id;
 });
 
 bot.action('tutorial_gas', async (ctx) => {
@@ -299,8 +275,8 @@ bot.action('tutorial_gas', async (ctx) => {
   const sent = await ctx.reply(
     `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
     `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
-    `2️⃣ Klik <b>📜 AMBIL SCRIPT GAS</b> untuk mendownload PDF 1 halamannya.\n` +
-    `3️⃣ Salin dan tempel kodenya ke editor <code>Code.gs</code>.\n` +
+    `2️⃣ Klik tombol <b>📜 AMBIL SCRIPT GAS</b> di bot ini.\n` +
+    `3️⃣ Salin kodenya langsung dari chat Telegram dan tempel ke editor <code>Code.gs</code>.\n` +
     `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih <b>Web app</b>.\n` +
     `5️⃣ Atur <b>Execute as</b>: <i>Me</i> & <b>Who has access</b>: <i>Anyone</i>.\n` +
     `6️⃣ Salin URL Web App (berakhiran <code>/exec</code>) dan masukkan ke bot via <b>⚙️ SETTING WEBHOOK GAS</b>.`,
