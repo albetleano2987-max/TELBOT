@@ -5,7 +5,7 @@ const xlsx = require('xlsx');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 // Link GAS terbaru kamu yang sudah terhubung
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyq8oWtqgUB6jCFhEza-b1J3dK4j6f89x5UR6v3PzSlFL_1BNKxGbl4GGnNCdbFmA/exec';
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwjNy1kGa3ZbwkAvL5p_ZmDQY6WyKZrf5egStHCDcWNx0Dn6K6AJYdqOOp9bPFR3XNA/exec';
 
 const bot = new Telegraf(BOT_TOKEN || '');
 const userSessions = {};
