@@ -4,7 +4,7 @@ const csv = require('csv-parser');
 const xlsx = require('xlsx');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwxerG0_lmiS7XIctAWvQBpUhXbHQL6yZrNDgCUPWWaPL7X5UMNExufD1eadSJ7ThwN/exec';
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxoxerG0_lm57X1ctAvkQ8pUhX0HDlGyZJrNDgCUPWnPl7XSIdNEXu';
 
 const bot = new Telegraf(BOT_TOKEN || '');
 const userSessions = {};
@@ -22,6 +22,10 @@ const getSession = (userId) => {
       gasUrl: DEFAULT_GAS_URL, 
       lastMsgId: null 
     };
+  } else {
+    if (!userSessions[userId].gasUrl) {
+      userSessions[userId].gasUrl = DEFAULT_GAS_URL;
+    }
   }
   return userSessions[userId];
 };
@@ -429,13 +433,13 @@ bot.action('reset_session', async (ctx) => {
     subject: '', 
     body: '', 
     pdf: null, 
-    gasUrl: '', 
+    gasUrl: DEFAULT_GAS_URL, 
     lastMsgId: null 
   };
   const session = getSession(ctx.from.id);
-  ctx.answerCbQuery('Sesi & Webhook Di-reset!');
+  ctx.answerCbQuery('Sesi Di-reset!');
   await clearBotMsg(ctx, session);
-  const sent = await ctx.reply('🧹 Data sesi dan Webhook berhasil dibersihkan. Silakan setting ulang webhook.', mainMenu);
+  const sent = await ctx.reply('🧹 Data sesi berhasil dibersihkan.', mainMenu);
   session.lastMsgId = sent.message_id;
 });
 
