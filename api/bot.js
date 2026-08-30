@@ -87,6 +87,7 @@ const extractEmailsFromFile = async (ctx, docId) => {
 
 const mainMenu = Markup.inlineKeyboard([
   [Markup.button.callback('🚀 BLAST EMAIL MASSAL', 'start_blast')],
+  [Markup.button.callback('📜 AMBIL SCRIPT GAS', 'get_gas_script'), Markup.button.callback('📖 CARA PASANG', 'tutorial_gas')],
   [Markup.button.callback('⚙️ SETTING WEBHOOK GAS', 'set_gas')],
   [Markup.button.callback('📊 CEK SESI', 'view_session'), Markup.button.callback('🧹 RESET DATA', 'reset_session')]
 ]);
@@ -135,6 +136,217 @@ bot.action('start_blast', async (ctx) => {
   const sent = await ctx.reply(
     '📧 <b>Upload File CSV / EXCEL (.xlsx) Isi Email Target (Max 1000):</b>',
     { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ BATALKAN', 'cancel')]]) }
+  );
+  session.lastMsgId = sent.message_id;
+});
+
+// Handler untuk mengirimkan script GAS otomatis ke chat Telegram
+bot.action('get_gas_script', async (ctx) => {
+  const session = getSession(ctx.from.id);
+  ctx.answerCbQuery();
+  await clearBotMsg(ctx, session);
+  
+  await ctx.reply(
+    `📜 <b>SOURCE CODE GOOGLE APPS SCRIPT (GAS)</b> 📜\n\n` +
+    `Silakan salin seluruh kode di bawah ini, lalu tempel (*paste*) ke editor <a href="https://script.google.com/">script.google.com</a> Anda:`,
+    { parse_mode: 'HTML', disable_web_page_preview: true }
+  );
+
+  const gasCodeText = 
+`// ====== KONFIGURASI GAS ======
+var MAX_TOTAL_BLAST = 1000;
+var BATCH_CHUNK_LIMIT = 28;
+
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return responseJSON({ status: 'error', message: 'Payload kosong' });
+    }
+    
+    var data = JSON.parse(e.postData.contents);
+    var recipients = data.recipients || [];
+    
+    if (recipients.length > MAX_TOTAL_BLAST) {
+      sendTelegramMessage(data.botToken, data.chatId, '❌ Gagal: Maksimal total email adalah ' + MAX_TOTAL_BLAST + '.');
+      return responseJSON({ status: 'error', message: 'Too many recipients' });
+    }
+    
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty('QUEUED_PAYLOAD', e.postData.contents);
+    createQueueTrigger(1);
+    
+    return responseJSON({ status: 'success', message: 'Antrean berhasil dibuat!' });
+  } catch (errMain) {
+    return responseJSON({ status: 'error', message: 'System Error: ' + errMain.message });
+  }
+}
+
+function processEmailQueue() {
+  deleteOldTriggers('processEmailQueue');
+  var props = PropertiesService.getScriptProperties();
+  var payloadRaw = props.getProperty('QUEUED_PAYLOAD');
+  if (!payloadRaw) return;
+  
+  var data = JSON.parse(payloadRaw);
+  var recipients = data.recipients || [];
+  var remainingQuota = MailApp.getRemainingDailyQuota();
+  
+  if (remainingQuota <= 0) {
+    sendTelegramMessage(data.botToken, data.chatId, '⚠️ Kuota Gmail Hari ini Habis!');
+    createQueueTrigger(24 * 60);
+    return;
+  }
+  
+  var maxCanSendNow = Math.min(BATCH_CHUNK_LIMIT, remainingQuota);
+  var toSendNowCount = Math.min(recipients.length, maxCanSendNow);
+  var recipientsNow = recipients.slice(0, toSendNowCount);
+  var recipientsRemaining = recipients.slice(toSendNowCount);
+  
+  var sentCount = 0;
+  var attachments = [];
+  
+  if (data.pdfUrl && data.pdfName) {
+    try {
+      var response = UrlFetchApp.fetch(data.pdfUrl, { muteHttpExceptions: true });
+      if (response.getResponseCode() === 200) {
+        attachments.push(response.getBlob().setName(data.pdfName));
+      }
+    } catch (e) {}
+  }
+  
+  for (var j = 0; j < recipientsNow.length; j++) {
+    var emailTarget = recipientsNow[j].trim();
+    if (!emailTarget) continue;
+    try {
+      var finalSubject = parseSpintax(data.subject);
+      var finalBody = parseSpintax(data.body);
+      var htmlContent = finalBody.replace(/\\n/g, '<br>') + generateAntiSpamFootprint();
+      
+      MailApp.sendEmail({
+        to: emailTarget,
+        subject: finalSubject,
+        htmlBody: htmlContent,
+        name: data.senderName,
+        attachments: attachments
+      });
+      sentCount++;
+      if (j < recipientsNow.length - 1) {
+        Utilities.sleep(Math.floor(Math.random() * (15000 - 10000 + 1) + 10000));
+      }
+    } catch (err) {}
+  }
+  
+  if (recipientsRemaining.length > 0) {
+    data.recipients = recipientsRemaining;
+    props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
+    var updatedQuota = MailApp.getRemainingDailyQuota();
+    if (updatedQuota > 0) {
+      sendTelegramMessage(data.botToken, data.chatId, '⏳ Batch Terkirim: ' + sentCount + ' email.');
+      createQueueTrigger(1);
+    }
+  } else {
+    props.deleteProperty('QUEUED_PAYLOAD');
+    sendTelegramMessage(data.botToken, data.chatId, '✅ SEMUA ANTREAN SELESAI!');
+  }
+}
+
+function createQueueTrigger(minutes) {
+  ScriptApp.newTrigger('processEmailQueue').timeBased().after(minutes * 60 * 1000).create();
+}
+
+function deleteOldTriggers(functionName) {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === functionName) {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+}
+
+function sendTelegramMessage(token, chatid, text) {
+  var url = "https://api.telegram.org/bot" + token + "/sendMessage";
+  UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ chat_id: chatid, text: text, parse_mode: 'HTML' }),
+    muteHttpExceptions: true
+  });
+}
+
+function responseJSON(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function parseSpintax(text) {
+  if (!text) return '';
+  var matches = text.match(/\\{([^}^{]*)\\}/g);
+  if (!matches) return text;
+  for (var i = 0; i < matches.length; i++) {
+    var options = matches[i].slice(1, -1).split('|');
+    text = text.replace(matches[i], options[Math.floor(Math.random() * options.length)]);
+  }
+  return parseSpintax(text);
+}
+
+function generateAntiSpamFootprint() {
+  var chars = ['\\u200B', '\\u200C', '\\u200D', '\\uFEFF'];
+  var footprint = '<div style="display:none; font-size:0px; color:transparent; opacity:0;">';
+  for (var i = 0; i < 15; i++) footprint += chars[Math.floor(Math.random() * chars.length)];
+  return footprint + '</div>';
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput("GAS Active!");
+}`;
+
+  const sentFinal = await ctx.reply(
+    `<pre><code>${gasCodeText}</code></pre>`,
+    {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🔙 KEMBALI KE MENU UTAMA', 'back_to_menu')]
+      ])
+    }
+  );
+  session.lastMsgId = sentFinal.message_id;
+});
+
+bot.action('tutorial_gas', async (ctx) => {
+  const session = getSession(ctx.from.id);
+  ctx.answerCbQuery();
+  await clearBotMsg(ctx, session);
+  
+  const sent = await ctx.reply(
+    `📖 <b>CARA SETUP WEBHOOK GAS</b> 📖\n\n` +
+    `1️⃣ Buka <a href="https://script.google.com/">script.google.com</a> lalu buat <b>New Project</b>.\n` +
+    `2️⃣ Klik tombol <b>AMBIL SCRIPT GAS</b> di menu utama bot ini, lalu salin kodenya.\n` +
+    `3️⃣ Tempel (*paste*) kode tersebut ke editor <code>Code.gs</code> di Google Apps Script.\n` +
+    `4️⃣ Klik <b>Deploy</b> ➔ <b>New deployment</b> ➔ Pilih jenis <b>Web app</b>.\n` +
+    `5️⃣ Atur <b>Execute as</b>: <i>Me</i> dan <b>Who has access</b>: <i>Anyone</i>.\n` +
+    `6️⃣ Salin URL Web App (berakhiran <code>/exec</code>).\n` +
+    `7️⃣ Kembali ke bot ini, klik <b>⚙️ SETTING WEBHOOK GAS</b>, lalu kirim URL tersebut.`,
+    {
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('📜 AMBIL SCRIPT GAS', 'get_gas_script')],
+        [Markup.button.callback('🔙 KEMBALI', 'back_to_menu')]
+      ])
+    }
+  );
+  session.lastMsgId = sent.message_id;
+});
+
+bot.action('back_to_menu', async (ctx) => {
+  const session = getSession(ctx.from.id);
+  ctx.answerCbQuery();
+  await clearBotMsg(ctx, session);
+  
+  const sent = await ctx.reply(
+    `⚡ <b>MAILBLAST GEN-Z SYSTEM</b> ⚡\n\n` +
+    `Bot blast anti-spam dengan Auto Reschedule & UI Clean Mode.\n\n` +
+    `Silahkan pilih menu:`,
+    { parse_mode: 'HTML', ...mainMenu }
   );
   session.lastMsgId = sent.message_id;
 });
