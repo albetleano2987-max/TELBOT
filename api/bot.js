@@ -146,7 +146,7 @@ bot.action('get_gas_file', async (ctx) => {
   await clearBotMsg(ctx, session);
 
   const cleanGasCode = `var MAX_TOTAL_BLAST = 1000;
-var BATCH_CHUNK_LIMIT = 28;
+var BATCH_CHUNK_LIMIT = 25;
 
 function doPost(e) {
   try {
@@ -165,7 +165,7 @@ function doPost(e) {
       props.setProperty('STOP_FLAG', 'true');
       props.deleteProperty('QUEUED_PAYLOAD');
       deleteOldTriggers('processEmailQueue');
-      return responseJSON({ status: 'success', message: 'Sinyal stop diterima! Antrean dan sisa pengiriman berhasil dihentikan.' });
+      return responseJSON({ status: 'success', message: 'Sinyal stop diterima! Antrean berhasil dihentikan.' });
     }
     
     var recipients = data.recipients || [];
@@ -176,7 +176,10 @@ function doPost(e) {
     
     props.deleteProperty('STOP_FLAG');
     props.setProperty('QUEUED_PAYLOAD', e.postData.contents);
+    deleteOldTriggers('processEmailQueue');
     createQueueTrigger(1);
+    
+    sendTelegramMessage(data.botToken, data.chatId, '🚀 <b>Blast Dimulai!</b>\\nTotal target: <b>' + recipients.length + ' email</b>. Memproses antrean...');
     return responseJSON({ status: 'success', message: 'Antrean berhasil dibuat!' });
   } catch (errMain) {
     return responseJSON({ status: 'error', message: 'System Error: ' + errMain.message });
@@ -199,9 +202,25 @@ function processEmailQueue() {
   var recipients = data.recipients || [];
   var remainingQuota = MailApp.getRemainingDailyQuota();
   
+  if (data.isWaitingFor24h) {
+    data.isWaitingFor24h = false;
+    sendTelegramMessage(data.botToken, data.chatId, '🔄 <b>Melanjutkan Pengiriman!</b>\\nWaktu tunggu 24 jam selesai. Memulai kembali pengiriman sisa antrean (' + recipients.length + ' email)...');
+  }
+  
   if (remainingQuota <= 0) {
-    sendTelegramMessage(data.botToken, data.chatId, '⚠️ Kuota Gmail Hari ini Habis!');
-    createQueueTrigger(24 * 60);
+    data.isWaitingFor24h = true;
+    props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
+    
+    sendTelegramMessage(
+      data.botToken, 
+      data.chatId, 
+      '⚠️ <b>KUOTA HARIAN HABIS!</b>\\n\\n' +
+      '• Sisa antrean tertunda: <b>' + recipients.length + ' email</b>\\n' +
+      '• Status: Pengiriman email hari ini selesai karena kuota habis.\\n' +
+      '• Tindakan: Bot akan otomatis <b>melanjutkan pengiriman 24 jam dari sekarang</b> setelah kuota di-reset oleh Google.'
+    );
+    
+    createQueueTrigger(24 * 60); 
     return;
   }
   
@@ -223,7 +242,7 @@ function processEmailQueue() {
   
   for (var j = 0; j < recipientsNow.length; j++) {
     if (PropertiesService.getScriptProperties().getProperty('STOP_FLAG') === 'true') {
-      sendTelegramMessage(data.botToken, data.chatId, '🛑 <b>BLAST DIHENTIKAN PAKSA</b>\\nTotal terkirim sebelum berhenti: ' + sentCount + ' email.');
+      sendTelegramMessage(data.botToken, data.chatId, '🛑 <b>BLAST DIHENTIKAN PAKSA</b>\\nTerkirim sebelum berhenti: ' + sentCount + ' email.');
       return;
     }
 
@@ -253,16 +272,42 @@ function processEmailQueue() {
     return;
   }
 
+  data.recipients = recipientsRemaining;
+  props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
+
   if (recipientsRemaining.length > 0) {
-    data.recipients = recipientsRemaining;
-    props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
     if (MailApp.getRemainingDailyQuota() > 0) {
-      sendTelegramMessage(data.botToken, data.chatId, '⏳ Batch Terkirim: ' + sentCount + ' email. Melanjutkan sisa antrean...');
+      sendTelegramMessage(
+        data.botToken, 
+        data.chatId, 
+        '📊 <b>Progres Batch Terkirim</b>\\n\\n' +
+        '• Berhasil dikirim pada batch ini: <b>' + sentCount + ' email</b>\\n' +
+        '• Sisa antrean belum dikirim: <b>' + recipientsRemaining.length + ' email</b>\\n\\n' +
+        'Melanjutkan batch berikutnya...'
+      );
       createQueueTrigger(1);
+    } else {
+      data.isWaitingFor24h = true;
+      props.setProperty('QUEUED_PAYLOAD', JSON.stringify(data));
+      
+      sendTelegramMessage(
+        data.botToken, 
+        data.chatId, 
+        '⚠️ <b>KUOTA HARIAN HABIS DI TENGAH JALAN!</b>\\n\\n' +
+        '• Sisa antrean tertunda: <b>' + recipientsRemaining.length + ' email</b>\\n' +
+        '• Status: Pengiriman email hari ini selesai karena kuota habis.\\n' +
+        '• Tindakan: Bot akan otomatis <b>melanjutkan pengiriman 24 jam dari sekarang</b>.'
+      );
+      createQueueTrigger(24 * 60);
     }
   } else {
     props.deleteProperty('QUEUED_PAYLOAD');
-    sendTelegramMessage(data.botToken, data.chatId, '✅ SEMUA ANTREAN SELESAI!');
+    sendTelegramMessage(
+      data.botToken, 
+      data.chatId, 
+      '✅ <b>SEMUA PENGIRIMAN SELESAI!</b>\\n\\n' +
+      'Seluruh target email berhasil dikirim ke semua penerima tanpa sisa.'
+    );
   }
 }
 
